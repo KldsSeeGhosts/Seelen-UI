@@ -10,8 +10,9 @@ Guidance for AI agents working in this repository.
 - Work on short-lived `ksg/<topic>` branches, preferably in dedicated worktrees. Keep distribution changes in
   `ksg/passthrough` and merge forward into `ksg/dev`. Preserve unrelated edits and existing task worktrees.
 - Review published upstream releases deliberately. Fetch their tags into `refs/tags/upstream/*`, verify the chosen
-  commit, then merge forward through `upstream`, `ksg/passthrough`, and `ksg/dev`. Use merges, not force-pushes. The
-  initial baseline is the already-installed development snapshot recorded in `fork-upstream.json`.
+  commit, then merge forward through `upstream`, `ksg/passthrough`, and `ksg/dev`. Use merges, not force-pushes. Do not
+  use GitHub's Sync fork button. The initial baseline is the already-installed development snapshot recorded in
+  `fork-upstream.json`.
 - Building, pushing source, publishing releases, and installing are separate actions. Do not publish, reinstall, or
   restart the desktop unless requested. A source push must not deploy anything.
 - Use `scripts/windows/build-local.ps1` for a standalone local debug build and

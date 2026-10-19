@@ -26,6 +26,11 @@ if ($ValidateOnly) {
 $installRoot = (Resolve-Path -LiteralPath $InstallDirectory).Path.TrimEnd('\')
 $source = (Resolve-Path -LiteralPath $source).Path.TrimEnd('\')
 $backupParentPath = [IO.Path]::GetFullPath($BackupParent).TrimEnd('\')
+$repository = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path.TrimEnd('\')
+if (
+    $backupParentPath -eq $repository -or
+    $backupParentPath.StartsWith($repository + '\', [StringComparison]::OrdinalIgnoreCase)
+) { throw 'Keep user-data backups outside the repository.' }
 foreach ($other in @($source, $backupParentPath)) {
     if (
         $other -eq $installRoot -or $other.StartsWith($installRoot + '\', [StringComparison]::OrdinalIgnoreCase) -or

@@ -84,7 +84,7 @@ Run the focused packaging checks with:
 
 Review published upstream releases when they contain relevant improvements. Do not automatically install upstream branch
 HEAD or a floating nightly tag. Fetching, reviewing, merging, pushing source, publishing, and installing are separate
-steps.
+steps. Avoid GitHub's Sync fork button, which bypasses the branch layers and release review.
 
 Fetch published tags into a separate namespace:
 

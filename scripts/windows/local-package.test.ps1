@@ -4,9 +4,14 @@ $temporary = Join-Path ([IO.Path]::GetTempPath()) ('seelen-package-test-' + [Gui
 $null = New-Item -ItemType Directory -Path (Join-Path $temporary 'static')
 
 function Assert-Rejected {
-    param([scriptblock]$Action, [string]$Reason)
+    param([scriptblock]$Action, [string]$Reason, [string]$ExpectedMessage)
     $rejected = $false
-    try { & $Action | Out-Null } catch { $rejected = $true }
+    try { & $Action | Out-Null } catch {
+        $rejected = $true
+        if ($ExpectedMessage -and $_.Exception.Message -notmatch $ExpectedMessage) {
+            throw "Unexpected rejection for ${Reason}: $_"
+        }
+    }
     if (-not $rejected) { throw "Expected rejection: $Reason" }
 }
 
@@ -56,6 +61,12 @@ try {
     Assert-Rejected {
         Assert-LocalPackage -Directory $temporary -ManifestPath $manifestPath -RequireLocalBuild
     } 'unsupported update policy'
+    $manifest.upstreamUpdates = $false
+    $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+    Assert-Rejected {
+        & (Join-Path $PSScriptRoot 'install-local.ps1') -BuildDirectory $temporary `
+            -InstallDirectory $PSScriptRoot -BackupParent (Join-Path $PSScriptRoot '..\..') -WhatIf
+    } 'user data inside the repository' 'outside the repository'
 
     $pe = Join-Path $temporary 'synthetic.exe'
     $bytes = [byte[]]::new(512)
