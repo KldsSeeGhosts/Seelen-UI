@@ -2,6 +2,26 @@
 
 Guidance for AI agents working in this repository.
 
+## KSG fork maintenance
+
+- `origin` is `KldsSeeGhosts/Seelen-UI`; the `upstream` remote is `eythaann/Seelen-UI`.
+- The `upstream` branch is an untouched upstream baseline. `ksg/passthrough` holds build and distribution changes;
+  `ksg/dev` is the default integration branch for personal customizations.
+- Work on short-lived `ksg/<topic>` branches, preferably in dedicated worktrees. Keep distribution changes in
+  `ksg/passthrough` and merge forward into `ksg/dev`. Preserve unrelated edits and existing task worktrees.
+- Review published upstream releases deliberately. Fetch their tags into `refs/tags/upstream/*`, verify the chosen
+  commit, then merge forward through `upstream`, `ksg/passthrough`, and `ksg/dev`. Use merges, not force-pushes. The
+  initial baseline is the already-installed development snapshot recorded in `fork-upstream.json`.
+- Building, pushing source, publishing releases, and installing are separate actions. Do not publish, reinstall, or
+  restart the desktop unless requested. A source push must not deploy anything.
+- Use `scripts/windows/build-local.ps1` for a standalone local debug build and
+  `scripts/windows/install-local.ps1 -ValidateOnly` to check it. Installation and rollback require Windows elevation.
+- Preserve the application ID, user data, extensions, startup configuration, and Windows security settings. Keep
+  backups, manifests containing local paths, credentials, and signing keys outside tracked files.
+- Inherited GitHub Actions are disabled on the fork. Do not enable them until the upstream publication workflows have
+  been replaced or restricted for the fork. Local builds already disable upstream in-app updates.
+- See [fork maintenance](documentation/fork-maintenance.md) for build, install, rollback, and sync commands.
+
 Seelen UI is a customizable Windows desktop environment built with:
 
 - Rust + Tauri (backend)
