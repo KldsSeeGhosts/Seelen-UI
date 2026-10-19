@@ -10,6 +10,9 @@ plugin:
   tooltip: |-
     return user.displayName;
   template: |-
-    return [Image({ path: user.profilePicturePath }), ' ', user.displayName];
+    const picture = user.profilePicturePath
+      ? Image({ path: user.profilePicturePath })
+      : Icon({ name: "FaRegCircleUser" });
+    return [picture, ' ', user.displayName];
   onClickV2: |-
     trigger("@seelen/user-menu");

@@ -2,6 +2,10 @@
 
 This document defines **how Seelen UI looks and why**.
 
+> **KSG fork:** this fork replaces upstream's flat language with **KSG Glass**: one neutral glass material (tint,
+> specular rim, soft shadow, generous concentric radii) for everything that floats over the desktop. The rules below are
+> the fork's; where they mention glass they differ from upstream on purpose.
+
 **Scope:**
 
 - **Built-in widgets and the default theme: mandatory.** It is a contract, not a suggestion. Any developer or AI agent
@@ -38,9 +42,11 @@ This document defines **how Seelen UI looks and why**.
 0. **UX comes first.** Every rule below serves usability. When a rule would hurt usability (illegible text, a state the
    user cannot perceive, a hidden affordance), the usability need wins. Such exceptions must be **functional**, never
    aesthetic, and must stay as small as possible. See [UX exceptions](#ux-exceptions).
-1. **Flat design.** Solid, opaque surfaces, subtle shadows (`--shadow-s/m/l`), soft rounded corners. No gradients,
-   glows, glassmorphism, skeuomorphism, borders, or "eye candy" in the default look. Depth is communicated by surface
-   tone and shadow — nothing else.
+1. **One glass material.** Everything floating over the desktop (toolbar, dock, popovers, menus, stack bar) is built
+   from the `--slu-glass-*` tokens: a neutral tint, a specular top hairline with a closing edge (`--slu-glass-rim`), a
+   soft shadow and generous concentric radii. Bars and the dock are translucent; popovers and menus stay opaque, since a
+   webview cannot blur what is behind its window. No gradients, glows, neon, skeuomorphism or framing borders. The
+   accent marks state only (on, active, focused, selected); hover and pressed on glass are neutral.
 2. **Dynamic by default.** Every color comes from a variable. UI colors adapt to the user's **light/dark color scheme**
    and **Windows accent color**, so the UI looks correct in both schemes without any extra code.
 3. **Standard components, defined once.** Buttons, inputs, selects, sliders, switches, checkboxes, radios and popovers
@@ -69,16 +75,16 @@ desktop bars below.
 This table is the complete list of accepted exceptions. Use it as precedent: a new exception must meet the same bar and
 is only valid once a maintainer approves it and it is added here.
 
-| Exception                                                       | Where                                                                              | Why                                                                             |
-| --------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Semi-transparent background (derived from `--slu-std-bg-color`) | Toolbar, dock (including its window preview) and window manager stack bar **only** | Design exception: always-visible desktop bars blend with the wallpaper.         |
-| Dark translucent full-screen overlay (scrim)                    | Behind full-screen modals (e.g. power menu)                                        | Signals a modal state covering the whole desktop. The modal itself is standard. |
-| `text-shadow`                                                   | Text drawn over dynamic images (e.g. media album art)                              | Legibility over unpredictable backgrounds.                                      |
-| Inset edge shadows                                              | Scrollable containers with overflow (e.g. dock)                                    | Affordance: tells the user there is more content to scroll.                     |
-| Infinite animation                                              | Loading spinners, "needs attention" indicators                                     | State feedback: the state lasts until it changes.                               |
-| Focus ring (`outline`)                                          | Keyboard focus (`:focus-visible`)                                                  | Accessibility: shows where keyboard focus is.                                   |
-| Accent `outline`                                                | Current selection in task switcher, drag & drop targets                            | State feedback / affordance: the line _is_ the indicator.                       |
-| Control `border`                                                | Unchecked checkbox / radio                                                         | Affordance: without it the control is invisible.                                |
+| Exception                                        | Where                                                                              | Why                                                                             |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Semi-transparent background (`--slu-glass-tint`) | Toolbar, dock (including its window preview) and window manager stack bar **only** | Design exception: always-visible desktop bars blend with the wallpaper.         |
+| Dark translucent full-screen overlay (scrim)     | Behind full-screen modals (e.g. power menu)                                        | Signals a modal state covering the whole desktop. The modal itself is standard. |
+| `text-shadow`                                    | Text drawn over dynamic images (e.g. media album art)                              | Legibility over unpredictable backgrounds.                                      |
+| Inset edge shadows                               | Scrollable containers with overflow (e.g. dock)                                    | Affordance: tells the user there is more content to scroll.                     |
+| Infinite animation                               | Loading spinners, "needs attention" indicators                                     | State feedback: the state lasts until it changes.                               |
+| Focus ring (`outline`)                           | Keyboard focus (`:focus-visible`)                                                  | Accessibility: shows where keyboard focus is.                                   |
+| Accent `outline`                                 | Current selection in task switcher, drag & drop targets                            | State feedback / affordance: the line _is_ the indicator.                       |
+| Control `border`                                 | Unchecked checkbox / radio                                                         | Affordance: without it the control is invisible.                                |
 
 Exceptions change _what_ is drawn, never _how colors are written_: their colors still come from variables
 (`--shadow-color` for shadows, `--color-fixed-*` for scrims), e.g. `hsl(var(--shadow-color) / 0.5)`.
@@ -219,6 +225,19 @@ of these.
 The only exception is the margin that reserves room for a surface's shadow inside its own window (e.g. `margin: 10px` on
 `.slu-std-popover` and `.flyout`): it is sized to the shadow, not to the layout, so it stays as is.
 
+### Glass — `--slu-glass-*` (`src/static/themes/default/shared/index.scss`)
+
+| Token                                                                      | Use                                                               |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `--slu-glass-tint` / `--slu-glass-tint-strong`                             | Translucent base of bars and the dock / its nearly opaque variant |
+| `--slu-glass-rim`                                                          | Inset specular top hairline + closing edge of every glass surface |
+| `--slu-glass-specular`, `--slu-glass-edge`                                 | The rim colors; `--slu-glass-edge` is also the divider color      |
+| `--slu-glass-fill` / `--slu-glass-fill-hover` / `--slu-glass-fill-pressed` | Modules and tiles inside glass; neutral hover and pressed states  |
+| `--slu-glass-shadow`                                                       | Drop shadow of popovers, sized to their 10px shadow margin        |
+
+A glass surface is `background` from its base token plus `box-shadow: var(--slu-glass-rim), var(--slu-glass-shadow)`.
+Hover/pressed of anything sitting on glass uses the glass fills; the accent overlays remain for selected list items.
+
 ### Shadows — `--shadow-*` (`libs/core/styles/shadows.css`)
 
 `--shadow-s` (controls), `--shadow-m` (popovers, menus), `--shadow-l` (modal dialogs). No other shadows, except the ones
@@ -240,9 +259,9 @@ Radii are a small scale **by role**, not a value per component:
 | Token           | Value    | Role                                                                 |
 | --------------- | -------- | -------------------------------------------------------------------- |
 | `--radius-xs`   | `4px`    | Tiny elements: checkboxes, small icons, compact cells, inline labels |
-| `--radius-s`    | `6px`    | Controls: buttons, inputs, selects, list items                       |
-| `--radius-m`    | `10px`   | Surfaces: popovers, menus, cards                                     |
-| `--radius-l`    | `16px`   | Large containers: dialogs, full-screen panels                        |
+| `--radius-s`    | `8px`    | Controls: buttons, inputs, selects, list items                       |
+| `--radius-m`    | `14px`   | Surfaces: menus, cards, tiles                                        |
+| `--radius-l`    | `20px`   | Large containers: popovers, dock, dialogs, full-screen panels        |
 | `--radius-full` | `9999px` | Pills: switches, badges, chips                                       |
 | `50%`           | —        | Circles only: avatars, status dots, round buttons                    |
 | Other `%`       | —        | Square, dynamically sized icons (e.g. app icons in the apps menu)    |
@@ -286,7 +305,7 @@ Rules:
 The only borders allowed are:
 
 - **Dividers**: a 1px line that separates sections (e.g. a header from its content, items of a dock). Always
-  `--slu-std-fg-muted-color`, never lowered with `opacity`. Use them only where spacing and surface tone are not enough.
+  `--slu-glass-edge`, never lowered with `opacity`. Use them only where spacing and surface tone are not enough.
 - The border that draws an unchecked checkbox/radio (without it the control is invisible).
 
 **`outline` — reserved for focus and state.** `outline` is the UX tool to point at something, never decoration:
@@ -314,6 +333,8 @@ Always with accent or status color variables; never to frame a box or separate c
 - Font size units: always `rem`/`em`, never `px`, so text follows the user's settings.
 - Weights: any weight is allowed, always as a fixed numeric value (`400`, `500`, `600`, `700`…). Never keywords, and
   never relative ones (`bolder`, `lighter`), since they depend on the parent and are unpredictable for themes.
+- Numbers that update in place (clock, percentages, counters) use `font-variant-numeric: tabular-nums` so they do not
+  jitter. Labels are sentence case: no `text-transform: uppercase` or tracked-out letter spacing.
 
 ### Icons
 
@@ -327,7 +348,9 @@ Always with accent or status color variables; never to frame a box or separate c
 defined in shared styles), state changes of controls, and infinite animations that communicate an ongoing state
 (spinners, attention indicators). Keep them short and simple.
 
-- Forbidden: decorative motion — animated backgrounds, ambient/idle effects, complex or showy hover animations.
+- Forbidden: decorative motion — animated backgrounds, ambient/idle effects, complex or showy hover animations. The
+  dock's hover lift (the hovered icon and its neighbors scale up) is the one deliberate hover motion: it answers the
+  pointer and shows which item will be launched.
 - The app itself stops/skips **all** animations when the user enables extreme performance mode or the OS asks for
   reduced motion (`prefers-reduced-motion`). Themes and widgets do not need to handle either case, but must never depend
   on an animation for correctness (a loading state must still be recognizable without the spin).
@@ -429,7 +452,7 @@ Reject these in review, regardless of who (person or AI) wrote them:
 
 - Hardcoded colors (`#fff`, `rgb(0 0 0 / .5)`, `black`, `white`), anywhere, for any reason. Use a variable.
 - Font families other than the inherited system font (including `monospace`).
-- Gradients, glows, glass/acrylic surfaces (root-level `backdrop-filter`), neon effects. Blur on images is fine (see
+- Gradients, glows, root-level `backdrop-filter` (it renders as a plain tint), neon effects. Blur on images is fine (see
   [Blur](#blur)).
 - Shadows other than the `--shadow-*` tokens, outside the [UX exceptions](#ux-exceptions).
 - `border` to draw boxes or frame inputs; dividers in any color other than `--slu-std-fg-muted-color` or lowered with
@@ -438,6 +461,7 @@ Reject these in review, regardless of who (person or AI) wrote them:
 - Free alpha variants of colors (`oklch(from var(--x) l c h / 0.2)`, `rgb(from …)`, etc.) instead of the standard
   overlay variables.
 - Translucent surfaces outside the toolbar / dock / window manager stack bar exception.
+- Accent tints for hover/pressed on glass surfaces (use the neutral glass fills).
 - Decorative animations (animated backgrounds, idle effects, showy hover animations).
 - "Exceptions" justified by looks instead of a functional UX need (see [UX exceptions](#ux-exceptions)).
 - UI colors chosen in JS/TS (content-derived colors are fine, see [Light / Dark Mode](#4-light--dark-mode)), or
@@ -467,7 +491,7 @@ Before submitting any UI change:
 - [ ] Controls use `data-skin`; popups use `.slu-std-popover`.
 - [ ] Visual CSS lives in the default theme, not in the component.
 - [ ] Class names are intuitive kebab-case (not renamed without reason); states exposed via `data-*`.
-- [ ] No framing `border`; dividers use `--slu-std-fg-muted-color`; `outline` only for focus/state indicators.
-- [ ] Still flat and simple — nothing added "for style".
+- [ ] No framing `border`; dividers use `--slu-glass-edge`; `outline` only for focus/state indicators.
+- [ ] Glass surfaces use the `--slu-glass-*` tokens; nothing added "for style".
 - [ ] Animations only where needed, and the UI works with all animations disabled.
 - [ ] All text is i18n, rendered in the system font.

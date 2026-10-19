@@ -10,8 +10,8 @@
  */
 :root {
   --radius-xs: 4px; /* tiny elements: checkboxes, small icons, compact cells, inline labels */
-  --radius-s: 6px; /* controls: buttons, inputs, selects, list items */
-  --radius-m: 10px; /* surfaces: popovers, menus, cards */
-  --radius-l: 16px; /* large containers: dialogs, full-screen panels */
+  --radius-s: 8px; /* controls: buttons, inputs, selects, list items */
+  --radius-m: 14px; /* surfaces: menus, cards, tiles */
+  --radius-l: 20px; /* large containers: popovers, dock, dialogs, full-screen panels */
   --radius-full: 9999px; /* pills: switches, badges, chips */
 }

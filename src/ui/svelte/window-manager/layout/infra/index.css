@@ -20,10 +20,6 @@
     flex-grow: 1 !important;
   }
 
-  &.wm-leaf {
-    border-radius: 10px; /* windows 11 border radius */
-  }
-
   &.wm-horizontal {
     display: flex;
   }

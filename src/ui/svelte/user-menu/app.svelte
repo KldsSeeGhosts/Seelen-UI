@@ -19,18 +19,22 @@
   async function openLogFolder() {
     invoke(SeelenCommand.OpenFile, { path: await path.appLogDir() });
   }
+
+  function logOut() {
+    invoke(SeelenCommand.LogOut);
+  }
 </script>
 
 <div class="slu-std-popover user-popup">
   <UserProfile user={globalState.user} />
 
-  <hr />
+  <hr class="user-divider" />
   <span class="user-label">{$t("folders.title")}</span>
   {#each Object.entries(knownFolders.value) as folder (folder[0])}
     <UserFolder type={folder[0] as any} {...folder[1]} />
   {/each}
 
-  <hr />
+  <hr class="user-divider" />
   <span class="user-label">{$t("seelen_options.title")}</span>
   <div class="user-seelen-options">
     <button class="user-seelen-option-item" onclick={openInstallationFolder}>
@@ -44,6 +48,14 @@
       <span class="user-seelen-option-item-title">
         {$t("seelen_options.open_log_folder")}
       </span>
+    </button>
+  </div>
+
+  <hr class="user-divider" />
+  <div class="user-popup-footer">
+    <button data-skin="default" onclick={logOut}>
+      <Icon iconName="BiLogOut" />
+      <span>{$t("profile.log_out")}</span>
     </button>
   </div>
 </div>

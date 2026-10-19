@@ -1,16 +1,17 @@
 use notify_debouncer_full::{
-    DebounceEventResult, Debouncer, FileIdMap, new_debouncer,
-    notify::{ReadDirectoryChangesWatcher, RecursiveMode},
+    DebounceEventResult, DebouncedEvent, Debouncer, NoCache, new_debouncer_opt,
+    notify::{self, ReadDirectoryChangesWatcher, RecursiveMode},
 };
 use seelen_core::system_state::FolderType;
 use std::{
+    cmp::Reverse,
     collections::{HashMap, HashSet},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         LazyLock, Once,
         atomic::{AtomicBool, Ordering},
     },
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 use tauri::Manager;
 
@@ -20,6 +21,11 @@ use crate::{
     event_manager,
     utils::lock_free::TracedMutex,
 };
+
+/// Hard cap of walk entries visited per folder scan, huge trees are walked partially.
+const MAX_SCAN_ENTRIES: usize = 20_000;
+/// Hard cap of files kept (and sent to the webviews) per folder.
+const MAX_FOLDER_ITEMS: usize = 300;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UserFoldersManagerEvent {
@@ -36,7 +42,7 @@ pub struct FolderDetails {
     pub content: Vec<PathBuf>,
     /// `None` when the folder could not be watched (missing path, denied access, etc).
     /// The already scanned content is still served in that case.
-    _watcher: Option<Debouncer<ReadDirectoryChangesWatcher, FileIdMap>>,
+    _watcher: Option<Debouncer<ReadDirectoryChangesWatcher, NoCache>>,
 }
 
 #[derive(Debug)]
@@ -99,63 +105,101 @@ impl UserFoldersManager {
     }
 
     fn get_folder_content(base_path: PathBuf, folder_type: FolderType) -> Result<Vec<PathBuf>> {
-        // Recent is a flat folder of .lnk shortcuts; others are scanned up to 5 levels deep
+        // Recent is a flat folder of .lnk shortcuts; others are scanned up to 3 levels deep
         // to avoid exploding on large/deep folder trees.
         let max_depth = match folder_type {
             FolderType::Recent => 1,
-            _ => 5,
+            _ => 3,
         };
 
-        let mut list = Vec::new();
+        // (last modified time, path), files with unreadable metadata sort last
+        let mut list: Vec<(Option<SystemTime>, PathBuf)> = Vec::new();
 
-        for entry in walkdir::WalkDir::new(&base_path)
+        for (index, entry) in walkdir::WalkDir::new(&base_path)
             .follow_links(false)
             .max_depth(max_depth)
             .into_iter()
             .filter_entry(|e| !is_ignored_entry(e.path()))
-            .filter_map(|e| e.ok())
+            .enumerate()
         {
+            if index >= MAX_SCAN_ENTRIES {
+                break;
+            }
+
+            let Ok(entry) = entry else {
+                continue;
+            };
+
             let path = entry.path();
-            if !path.is_file() || is_ignored_file(path) {
+            // links aren't followed while walking, but a link to a file is still listed
+            let is_file =
+                entry.file_type().is_file() || (entry.path_is_symlink() && path.is_file());
+            if !is_file || is_ignored_file(path) {
                 continue;
             }
 
-            list.push(path.to_path_buf());
+            let modified = entry
+                .metadata()
+                .ok()
+                .and_then(|metadata| metadata.modified().ok());
+            list.push((modified, path.to_path_buf()));
         }
 
-        Ok(list)
+        list.sort_by_key(|item| Reverse(item.0)); // newest first
+        list.truncate(MAX_FOLDER_ITEMS);
+
+        Ok(list.into_iter().map(|(_, path)| path).collect())
     }
 
     fn create_folder_watcher(
         path: &PathBuf,
         folder_type: FolderType,
-    ) -> Result<Debouncer<ReadDirectoryChangesWatcher, FileIdMap>> {
-        let mut debouncer = new_debouncer(
+    ) -> Result<Debouncer<ReadDirectoryChangesWatcher, NoCache>> {
+        // NoCache on purpose: the default file id cache indexes every file of the watched
+        // tree, which never ends on folders like Documents with millions of files.
+        let root = path.clone();
+        let mut debouncer: Debouncer<ReadDirectoryChangesWatcher, NoCache> = new_debouncer_opt(
             Duration::from_millis(1000),
             None,
             move |result: DebounceEventResult| match result {
-                Ok(_events) => {
+                Ok(events) => {
+                    if only_ignored_paths(&root, &events) {
+                        return;
+                    }
                     Self::reload_folder_content(folder_type).log_error();
                 }
                 Err(errors) => {
                     log::error!("Folder Watcher Error for {:?}: {errors:?}", folder_type);
                 }
             },
+            NoCache::new(),
+            notify::Config::default(),
         )?;
         debouncer.watch(path, RecursiveMode::Recursive)?;
         Ok(debouncer)
     }
 
     fn reload_folder_content(folder_type: FolderType) -> Result<()> {
-        let mut manager = Self::instance().lock();
+        // never scan while holding the manager lock, on huge trees the scan takes seconds
+        // and every reader of the folders would wait for it (and trip the lock watchdog).
+        let path = {
+            let manager = Self::instance().lock();
+            match manager.folders.get(&folder_type) {
+                Some(folder_details) => folder_details.path.clone(),
+                None => return Ok(()),
+            }
+        };
 
-        if let Some(folder_details) = manager.folders.get_mut(&folder_type) {
-            folder_details.content =
-                Self::get_folder_content(folder_details.path.clone(), folder_type)?;
-            drop(manager);
-            let _ = Self::event_tx().send(UserFoldersManagerEvent::FolderChanged(folder_type));
+        let content = Self::get_folder_content(path, folder_type)?;
+
+        {
+            let mut manager = Self::instance().lock();
+            if let Some(folder_details) = manager.folders.get_mut(&folder_type) {
+                folder_details.content = content;
+            }
         }
 
+        let _ = Self::event_tx().send(UserFoldersManagerEvent::FolderChanged(folder_type));
         Ok(())
     }
 
@@ -200,9 +244,27 @@ impl UserFoldersManager {
     }
 }
 
+/// Returns true when every path of the batch is inside an ignored directory of the watched
+/// `root`, in which case the change can't affect the listed files and the reload is pointless.
+/// Only components below `root` count, so a root that itself lives under e.g. `build` still
+/// reloads. An empty or mixed batch returns false, so it still triggers a reload.
+fn only_ignored_paths(root: &Path, events: &[DebouncedEvent]) -> bool {
+    let mut seen_any = false;
+    for path in events.iter().flat_map(|event| &event.paths) {
+        seen_any = true;
+        let Ok(relative) = path.strip_prefix(root) else {
+            return false;
+        };
+        if !relative.ancestors().any(is_ignored_entry) {
+            return false;
+        }
+    }
+    seen_any
+}
+
 /// Returns true if the entry should be excluded from the file list.
 /// When applied via `filter_entry`, returning true for a directory prunes its entire subtree.
-fn is_ignored_entry(path: &std::path::Path) -> bool {
+fn is_ignored_entry(path: &Path) -> bool {
     static IGNORED: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
         HashSet::from([
             // Dev artifact directories
@@ -241,7 +303,7 @@ fn is_ignored_entry(path: &std::path::Path) -> bool {
         .is_some_and(|name| IGNORED.contains(name))
 }
 
-fn is_ignored_file(path: &std::path::Path) -> bool {
+fn is_ignored_file(path: &Path) -> bool {
     static IGNORED: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
         HashSet::from([
             // Temp / backup

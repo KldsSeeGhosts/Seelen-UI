@@ -2,6 +2,7 @@ import { invoke, SeelenCommand, SeelenEvent, subscribe } from "@seelen-ui/lib";
 import { FolderType } from "@seelen-ui/lib/types";
 import { lazyRune } from "libs/ui/svelte/utils";
 
+const recent = lazyRune(() => invoke(SeelenCommand.GetUserFolderContent, { folderType: FolderType.Recent }));
 const desktop = lazyRune(() => invoke(SeelenCommand.GetUserFolderContent, { folderType: FolderType.Desktop }));
 const downloads = lazyRune(() => invoke(SeelenCommand.GetUserFolderContent, { folderType: FolderType.Downloads }));
 const documents = lazyRune(() => invoke(SeelenCommand.GetUserFolderContent, { folderType: FolderType.Documents }));
@@ -11,6 +12,9 @@ const videos = lazyRune(() => invoke(SeelenCommand.GetUserFolderContent, { folde
 
 subscribe(SeelenEvent.UserFolderChanged, ({ payload: { ofFolder, content } }) => {
   switch (ofFolder) {
+    case FolderType.Recent:
+      recent.value = content;
+      break;
     case FolderType.Desktop:
       desktop.value = content;
       break;
@@ -33,6 +37,7 @@ subscribe(SeelenEvent.UserFolderChanged, ({ payload: { ofFolder, content } }) =>
 });
 
 await Promise.all([
+  recent.init(),
   desktop.init(),
   downloads.init(),
   documents.init(),
@@ -48,6 +53,12 @@ function pathAsItem(path: string) {
   };
 }
 
+// recent entries are shortcuts, the `.lnk` suffix is noise on the display name
+function recentPathAsItem(path: string) {
+  const item = pathAsItem(path);
+  return { ...item, displayName: item.displayName.replace(/\.lnk$/i, "") };
+}
+
 function predicate(path: string): boolean {
   let lowercased = path.toLowerCase();
   return !lowercased.endsWith(".ini") && !lowercased.endsWith(".tmp");
@@ -57,7 +68,7 @@ const _knownFolders: Record<FolderType, FolderData> = $derived.by(() => {
   return {
     [FolderType.Recent]: {
       icon: "MdOutlineHistory",
-      content: [],
+      content: recent.value.filter(predicate).map(recentPathAsItem),
     },
     [FolderType.Desktop]: {
       icon: "HiOutlineDesktopComputer",

@@ -1,9 +1,12 @@
 @mixin fade {
   opacity: 1;
   scale: 1;
+  // background-color rides in the same list so the clickable hover/pressed fill animates
+  // without a second `transition` declaration that would replace the mount/unmount one
   transition:
     opacity 200ms ease,
-    scale 200ms ease;
+    scale 200ms ease,
+    background-color 120ms ease-out;
 
   &[data-mounting] {
     @starting-style {
@@ -19,13 +22,32 @@
 }
 
 .ft-bar {
-  background-color: oklch(from var(--slu-std-bg-color) l c h / 0.9);
+  background-color: var(--slu-glass-tint);
+  transition: background-color 250ms ease-out;
 
-  &[data-has-margin="true"] {
-    border-radius: calc((var(--config-item-size) + var(--config-padding) * 2) * 0.3);
+  color: var(--slu-std-fg-color);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+
+  // hairline on the edge that faces the desktop (the bar is attached to a screen edge)
+  &.top {
+    box-shadow: inset 0 -1px 0 0 var(--slu-glass-edge);
   }
 
-  // &[data-there-is-maximized-on-background="true"] {} (this attribute exist but is unused)
+  &.bottom {
+    box-shadow: inset 0 1px 0 0 var(--slu-glass-specular);
+  }
+
+  // a maximized window sits right below the bar, so the bar reads as part of it
+  &[data-there-is-maximized-on-background="true"] {
+    background-color: var(--slu-glass-tint-strong);
+  }
+
+  // detached island: fully rounded by the item size, floating with the material rim and shadow
+  &[data-has-margin="true"] {
+    border-radius: calc((var(--config-item-size) + var(--config-padding) * 2) * 0.3);
+    box-shadow: var(--slu-glass-rim), var(--slu-glass-shadow);
+  }
 }
 
 .ft-bar-item {
@@ -33,21 +55,21 @@
   @include fade;
 
   &.ft-bar-item-clickable {
-    border-radius: calc(var(--config-item-size) * 0.3);
+    border-radius: var(--radius-full);
 
     &:hover {
-      background-color: var(--slu-std-ui-hover-overlay);
+      background-color: var(--slu-glass-fill-hover);
     }
 
     &:active {
-      background-color: var(--slu-std-ui-pressed-overlay);
+      background-color: var(--slu-glass-fill-pressed);
     }
   }
 }
 
 .ft-bar-item-content {
   img {
-    border-radius: calc(var(--config-item-size) * 0.3);
+    border-radius: calc(var(--config-item-size) * 0.25);
   }
 }
 
@@ -59,20 +81,29 @@
   position: absolute;
   top: 0;
   right: 0;
+
+  min-width: 14px;
+  min-height: 14px;
+  padding: 0 3px;
+
   background-color: var(--slu-std-ui-color);
   color: var(--slu-std-ui-fg-color);
-  height: 12px;
-  min-width: 12px;
-  font-size: 0.625rem;
+  // ring that separates the counter from the icon behind it
+  box-shadow: 0 0 0 1.5px var(--slu-std-bg-color);
   border-radius: var(--radius-full);
+  font-size: 0.625rem;
+  font-weight: 600;
 }
 
 .ft-corner-button {
+  border-radius: var(--radius-full);
+  transition: background-color 120ms ease-out;
+
   &:hover {
-    background-color: var(--slu-std-ui-hover-overlay);
+    background-color: var(--slu-glass-fill-hover);
   }
 
   &:active {
-    background-color: var(--slu-std-ui-pressed-overlay);
+    background-color: var(--slu-glass-fill-pressed);
   }
 }

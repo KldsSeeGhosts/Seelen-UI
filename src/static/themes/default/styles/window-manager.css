@@ -1,11 +1,24 @@
 .wm-leaf {
+  /* Windows platform constant: Windows 11 rounds top-level windows with an 8px radius.
+     It is not a design token, it has to match the real window shape so the frame can hug it. */
+  --wm-window-radius: 8px;
+
   &.wm-leaf-with-borders {
     border-style: solid;
     border-width: var(--config-border-width);
-    border-color: var(--system-accent-dark-color);
+    border-color: transparent; /* only the focused window is framed */
+    transition: border-color 150ms ease-out;
+
+    /* Hug the window: the window rect is inset from this box by the border width plus the
+       border offset (see requestPositioningOfLeaves), and box-sizing is border-box, so this
+       radius is the frame's outer curve. Its inner curve (radius - border width) then lands
+       on the window's own rounded corner. */
+    border-radius: calc(
+      var(--wm-window-radius) + var(--config-border-width) + var(--config-border-offset)
+    );
 
     &.wm-leaf-focused {
-      border-color: var(--system-accent-light-color);
+      border-color: var(--slu-std-ui-color);
     }
   }
 }
@@ -20,15 +33,37 @@
 
     gap: var(--spacing-2xs);
     padding: var(--spacing-2xs);
-    border-radius: var(--radius-s);
+    border-radius: var(--radius-m);
 
-    background-color: oklch(from var(--slu-std-bg-color) l c h / 0.9);
-    box-shadow: var(--shadow-m);
+    background-color: var(--slu-glass-tint-strong);
+    box-shadow: var(--slu-glass-rim), var(--slu-glass-shadow);
 
     .wm-stack-bar-item {
       flex: 0 1 120px;
       max-width: 120px;
       min-width: 0;
+
+      /* tabs sit flat on the glass bar, only the active one is tinted */
+      border-radius: var(--radius-full);
+      background-color: transparent;
+      box-shadow: none;
+      transition: background-color 120ms ease-out;
+
+      /* hover and pressed stay neutral so the accent keeps meaning "active" */
+      &:not([data-skin="solid"]):hover:enabled {
+        background-color: var(--slu-glass-fill-hover);
+        color: var(--slu-std-fg-color);
+      }
+
+      &:not([data-skin="solid"]):active:enabled {
+        background-color: var(--slu-glass-fill-pressed);
+      }
+
+      /* active window of the stack */
+      &[data-skin="solid"] {
+        background-color: var(--slu-std-ui-selected-overlay);
+        color: var(--slu-std-fg-color);
+      }
 
       .wm-stack-bar-item-icon {
         width: 1rem;
@@ -52,15 +87,17 @@
 }
 
 .wm-reserved {
-  background-color: var(--system-accent-lighter-color);
-  border-radius: var(--radius-m);
-  opacity: 0.8;
+  background-color: var(--slu-std-ui-selected-overlay);
+  border-radius: var(--wm-window-radius);
+  /* drag & drop target indicator, the outline is the information */
+  outline: 2px solid var(--slu-std-ui-color);
+  outline-offset: -2px;
 
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 3rem;
-  color: var(--system-accent-darkest-color);
+  color: var(--slu-std-ui-color);
 
   transition-property: width, height, left, top;
   transition-duration: 100ms;

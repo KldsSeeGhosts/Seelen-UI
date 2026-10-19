@@ -1,9 +1,9 @@
 $itemSize: 256px;
 
+/* the container is also a `.slu-std-popover`, so the slab itself (opaque body, glass rim and
+   shadow, radius-l) comes from the shared styles; only the cards inside need the material fills */
 .weg-item-preview-container {
   width: max-content;
-  padding: var(--spacing-xs);
-  background-color: oklch(from var(--slu-std-bg-color) l c h / 0.8);
 
   .weg-item-preview-list {
     display: flex;
@@ -19,15 +19,14 @@ $itemSize: 256px;
     padding: var(--spacing-xs);
 
     border-radius: var(--radius-m);
-    background-color: var(--slu-std-bg-light-color);
-    box-shadow: var(--shadow-s);
+    background-color: var(--slu-glass-fill);
 
     display: flex;
     flex-direction: column;
     gap: var(--spacing-xs);
 
     &:hover {
-      background-color: var(--slu-std-bg-color);
+      background-color: var(--slu-glass-fill-hover);
     }
 
     .weg-item-preview-topbar {
@@ -55,8 +54,9 @@ $itemSize: 256px;
       justify-content: center;
       align-items: center;
 
-      background-color: var(--slu-std-bg-dark-color);
-      border-radius: var(--radius-m);
+      /* concentric with the card: inner radius = outer radius - the card padding */
+      border-radius: max(0px, calc(var(--radius-m) - var(--spacing-xs)));
+      background-color: var(--slu-glass-fill-pressed);
       overflow: hidden;
 
       .weg-item-preview-image {

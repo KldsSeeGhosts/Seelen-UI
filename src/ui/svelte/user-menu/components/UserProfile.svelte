@@ -12,6 +12,9 @@
 
   let { user }: Props = $props();
 
+  /** First grapheme of the name, drawn as the avatar monogram when there is no picture. */
+  const monogram = $derived(firstGrapheme(user.name).toUpperCase());
+
   async function openUserFolder() {
     invoke(SeelenCommand.OpenFile, { path: await path.homeDir() });
   }
@@ -26,51 +29,63 @@
     invoke(SeelenCommand.OpenFile, { path: "ms-settings:accounts" });
   }
 
-  function logOut() {
-    invoke(SeelenCommand.LogOut);
+  function firstGrapheme(text: string): string {
+    let trimmed = text.trim();
+    if (!trimmed) {
+      return "";
+    }
+    let [first] = new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(trimmed);
+    return first?.segment ?? "";
   }
 </script>
 
-<div class="user-profile-container">
-  <div class="user-profile-picture-container">
-    {#if user.profilePicturePath}
-      <img
-        class="user-profile-picture"
-        src={convertFileSrc(user.profilePicturePath)}
-        alt={user.name}
-      />
-    {:else}
-      <div class="user-profile-picture-fallback">
-        <Icon iconName="PiFolderUser" />
-      </div>
-    {/if}
-    <button class="user-profile-lock-button" onclick={logOut} title={$t("profile.log_out")}>
-      <Icon iconName="BiLogOut" />
-    </button>
+<div class="user-profile">
+  <div class="user-profile-container">
+    <div class="user-profile-picture-container">
+      {#if user.profilePicturePath}
+        <img
+          class="user-profile-picture"
+          src={convertFileSrc(user.profilePicturePath)}
+          alt={user.name}
+        />
+      {:else}
+        <div class="user-profile-picture-fallback" aria-hidden="true">
+          {#if monogram}
+            {monogram}
+          {:else}
+            <Icon iconName="FaRegCircleUser" />
+          {/if}
+        </div>
+      {/if}
+    </div>
+
+    <div class="user-profile-information">
+      <div class="user-profile-name" title={user.name}>{user.name}</div>
+
+      {#if user.email}
+        <div class="user-profile-email" title={user.email}>{user.email}</div>
+      {/if}
+    </div>
+  </div>
+
+  <div class="user-profile-actions">
     <button
-      class="user-profile-settings-button"
+      data-skin="transparent"
       onclick={openAccountSettings}
       title={$t("profile.accounts")}
+      aria-label={$t("profile.accounts")}
     >
       <Icon iconName="RiSettings3Fill" />
     </button>
-  </div>
 
-  <div class="user-profile-information">
-    <div class="user-profile-name">
-      <span>{user.name}</span>
-      <button
-        data-skin="transparent"
-        onclick={openUserFolder}
-        title={$t("profile.open_user_folder")}
-      >
-        <Icon iconName="PiFolderUser" />
-      </button>
-    </div>
-
-    {#if user.email}
-      <div class="user-profile-email">{user.email}</div>
-    {/if}
+    <button
+      data-skin="transparent"
+      onclick={openUserFolder}
+      title={$t("profile.open_user_folder")}
+      aria-label={$t("profile.open_user_folder")}
+    >
+      <Icon iconName="PiFolderUser" />
+    </button>
 
     {#if user.oneDrivePath}
       <button data-skin="transparent" onclick={openOneDrive} title={$t("profile.open_onedrive")}>
