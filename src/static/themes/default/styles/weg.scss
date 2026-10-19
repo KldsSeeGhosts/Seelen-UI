@@ -16,6 +16,11 @@
   }
 }
 
+/* wide items are not plain icons: a window title or the media session keeps a surface instead of
+   the icon lift, so they are excluded from the lift itself (the hover target stays their drag
+   container, which also magnifies the icons on both sides of them) */
+$liftable: ".weg-item:where(:not(:has(.weg-item-title)):not(.media-session-container))";
+
 /* like the native taskbar: pulse while the app flashes, then stay highlighted until the window is activated */
 @keyframes weg-item-flashing {
   from {
@@ -44,17 +49,44 @@
   }
 }
 
+/* macOS-like magnify: the hovered icon lifts away from the screen edge and its direct neighbours
+   grow a little. The item moves, the drag container is the hover target, because hovering the
+   moving box would flicker whenever the pointer is near the edge the icon lifts from. Keep the
+   liftable guard out of :has(), nested :has() is invalid and would empty the whole rule. */
+@mixin dock-lift($origin, $translate) {
+  #{$liftable} {
+    /* anchored on the screen-edge side, but a bit inside it: the items container clips at its
+       padding box, so the magnify plus the travel has to fit in --config-padding */
+    transform-origin: $origin;
+  }
+
+  .weg-item-drag-container:hover #{$liftable} {
+    scale: 1.12;
+    translate: $translate;
+  }
+
+  .weg-item-drag-container:has(+ .weg-item-drag-container:hover) #{$liftable},
+  .weg-item-drag-container:hover + .weg-item-drag-container #{$liftable} {
+    scale: 1.05;
+  }
+}
+
 .taskbar[data-has-margin="true"],
 .taskbar[data-size="min-content"] {
-  border-radius: var(--radius-l);
+  border-radius: calc(var(--item-border-radius) + var(--config-padding));
 
   > .weg-items-container {
-    border-radius: var(--radius-l);
+    border-radius: calc(var(--item-border-radius) + var(--config-padding));
   }
 }
 
 .taskbar {
-  background-color: oklch(from var(--slu-std-bg-color) l c h / 0.8);
+  background-color: var(--slu-glass-tint);
+  /* the window only has --config-margin of room above the dock, so the shadow may extend at most
+     that far upwards (blur minus offset); the bottom is the screen edge */
+  box-shadow:
+    var(--slu-glass-rim),
+    0 4px 12px hsl(var(--shadow-color) / 0.35);
 
   &.horizontal {
     > .weg-items-container {
@@ -75,13 +107,34 @@
   }
 }
 
+/* the lift follows the dock orientation: away from the screen edge the dock sits on */
+.taskbar:not(:has(.weg-item-drag-container.dragging)) {
+  &.bottom {
+    @include dock-lift(50% 80%, 0 -4px);
+  }
+
+  &.top {
+    @include dock-lift(50% 20%, 0 4px);
+  }
+
+  &.left {
+    @include dock-lift(20% 50%, 4px 0);
+  }
+
+  &.right {
+    @include dock-lift(80% 50%, -4px 0);
+  }
+}
+
 .weg-separator {
   .horizontal & {
-    border-left: 1px solid var(--slu-std-fg-muted-color);
+    border-left: 1px solid var(--slu-glass-edge);
+    margin: 0 var(--spacing-2xs);
   }
 
   .vertical & {
-    border-top: 1px solid var(--slu-std-fg-muted-color);
+    border-top: 1px solid var(--slu-glass-edge);
+    margin: var(--spacing-2xs) 0;
   }
 }
 
@@ -98,8 +151,8 @@
 :root {
   /* this count as x2 like there is a padding on each side */
   --item-inner-spacing: calc(var(--config-item-size) * 0.15);
-  /* same as use 25% but this works for rectangles */
-  --item-border-radius: calc(var(--config-item-size) * 0.25);
+  /* same as use 22.5% but this works for rectangles */
+  --item-border-radius: calc(var(--config-item-size) * 0.225);
 
   --item-size-medium: calc(var(--config-item-size) * 2 + var(--config-space-between-items));
   --item-size-large: calc(var(--config-item-size) * 3 + var(--config-space-between-items) * 2);
@@ -129,6 +182,8 @@
 
     background-color: var(--slu-std-ui-color);
     color: var(--slu-std-ui-fg-color);
+    /* separates the badge from the icon behind it */
+    box-shadow: 0 0 0 1.5px var(--slu-std-bg-color);
     font-size: 0.625rem;
     font-weight: 600;
 
@@ -159,23 +214,24 @@
     min-width: 16px;
     border-radius: var(--radius-full);
 
-    background-color: var(--color-gray-400);
-    color: var(--color-gray-100);
+    background-color: var(--slu-std-fg-secondary-color);
+    color: var(--slu-std-bg-color);
+    box-shadow: 0 0 0 1.5px var(--slu-std-bg-color);
     font-size: 0.625rem;
     font-weight: 600;
   }
 
   .weg-item-open-sign {
     position: absolute;
-    width: 3px;
-    height: 3px;
+    width: 4px;
+    height: 4px;
     border-radius: var(--radius-full);
-    background-color: var(--color-gray-600);
+    background-color: var(--slu-std-fg-secondary-color);
     opacity: 0;
 
-    transition-property: width, height, opacity, background-color, border-radius;
-    transition-duration: 0.2s;
-    transition-timing-function: linear;
+    transition-property: width, height, background-color, opacity;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
 
     .top & {
       left: 50%;
@@ -208,18 +264,25 @@
     &.weg-item-open-sign-focused {
       background-color: var(--slu-std-ui-color);
 
-      .vertical & {
-        height: 50%;
+      .horizontal & {
+        width: 10px;
       }
 
-      .horizontal & {
-        width: 50%;
+      .vertical & {
+        height: 10px;
       }
     }
 
     &.weg-item-open-sign-attention {
       background-color: var(--slu-std-ui-color);
     }
+  }
+}
+
+.weg-item-drag-container:hover {
+  .weg-item-icon,
+  .weg-item-canvas {
+    filter: brightness(1.05) saturate(1.1);
   }
 }
 
@@ -233,8 +296,6 @@
   gap: var(--item-inner-spacing);
   padding: var(--item-inner-spacing);
 
-  background-color: var(--slu-std-bg-light-color);
-  box-shadow: var(--shadow-s);
   border-radius: var(--item-border-radius);
 
   height: var(--config-item-size);
@@ -243,7 +304,9 @@
     width 200ms ease,
     height 200ms ease,
     padding 200ms ease,
-    border-radius 200ms ease;
+    border-radius 200ms ease,
+    scale 160ms ease-out,
+    translate 160ms ease-out;
 
   .weg-item-drag-container[data-mounting] & {
     @starting-style {
@@ -279,17 +342,8 @@
     }
   }
 
-  &:hover {
-    background-color: var(--slu-std-bg-dark-color);
-
-    .weg-item-icon,
-    .weg-item-canvas {
-      filter: brightness(1.05) saturate(1.1);
-    }
-  }
-
   &:active {
-    transform: translateY(2px);
+    filter: brightness(0.82);
   }
 
   &:has(.weg-item-icon[data-shape="square"]) {
@@ -313,13 +367,22 @@
     object-fit: contain;
   }
 
-  /* this is needed for the apps window title text */
+  /* this is needed for the apps window title text; the title is only displayed on horizontal
+     docks, so only then the item is a surface instead of a plain icon */
   &:has(.weg-item-title) {
     .horizontal & {
       width: fit-content;
       padding-right: var(--item-inner-spacing);
       min-width: var(--config-item-size);
       max-width: var(--item-size-large);
+
+      background-color: var(--slu-glass-fill);
+      scale: none;
+      translate: none;
+    }
+
+    .horizontal &:hover {
+      background-color: var(--slu-glass-fill-hover);
     }
   }
 
@@ -342,8 +405,17 @@
   overflow: hidden;
   padding: 0;
 
+  background-color: var(--slu-glass-fill);
+  scale: none;
+  translate: none;
+
+  &:hover {
+    background-color: var(--slu-glass-fill-hover);
+  }
+
+  /* the artwork is the surface, pressing its buttons should not darken it */
   &:active {
-    transform: none;
+    filter: none;
   }
 
   .media-session {

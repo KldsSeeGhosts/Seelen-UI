@@ -75,15 +75,16 @@ WinRT / COM safety:
 
 Design (see `documentation/design-system.md` before touching any UI/styles):
 
-- Simple as possible: flat design, standard `data-skin` components, tokens only (`--slu-std-*`, `--color-*`,
-  `--system-accent-*`, `--spacing-*`, `--shadow-*`, `--radius-*`), automatic light/dark via tokens. Nested rounded
-  corners must be concentric (inner radius = outer radius - padding).
+- Simple as possible: KSG Glass (one neutral glass material from the `--slu-glass-*` tokens), standard `data-skin`
+  components, tokens only (`--slu-std-*`, `--slu-glass-*`, `--color-*`, `--system-accent-*`, `--spacing-*`,
+  `--shadow-*`, `--radius-*`), automatic light/dark via tokens. Nested rounded corners must be concentric (inner radius
+  = outer radius - padding). Hover/pressed on glass use the neutral glass fills; the accent marks state only.
 - Accent ALWAYS = the user's Windows accent (`--system-accent-*` / `--slu-std-ui-*`). The color hue scales (red, green,
   blue…) are only for indicators that convey meaning (error, warning, success, info), never for accent or decoration.
 - Widget visuals live in the default theme (`src/static/themes/default/`), not in components, so users can mod them.
-- No framing `border` (flat): separate with spacing and surface tone; dividers only when needed, 1px in
-  `--slu-std-fg-muted-color`. `outline` is reserved for focus and state indicators (focus ring, active/selected item,
-  drag & drop target, field error), never decoration.
+- No framing `border`: separate with spacing and surface tone; dividers only when needed, 1px in `--slu-glass-edge`.
+  `outline` is reserved for focus and state indicators (focus ring, active/selected item, drag & drop target, field
+  error), never decoration.
 - Never redesign, add decorative effects, or invent one-off control styles unless the maintainers explicitly ask.
 - Colors are never hardcoded and never derived with ad-hoc alphas (use the `--slu-std-ui-*-overlay` vars). Status hues:
   error = red, warning = yellow, success = green, info = blue. The font is always the system font (no monospace).

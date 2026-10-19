@@ -23,6 +23,9 @@
     }
     return `${src}${src.includes("?") ? "&" : "?"}v=${encodeURIComponent(props.version)}`;
   }
+
+  // an empty src would be rendered as the browser's broken image glyph
+  const imageSource = $derived(parsed?.kind === ObjectComponentKind.Image ? imageSrc(parsed.props) : "");
 </script>
 
 {#if parsed}
@@ -41,7 +44,9 @@
   {:else if parsed.kind === ObjectComponentKind.AppIcon}
     <FileIcon path={parsed.props.path} umid={parsed.props.umid} />
   {:else if parsed.kind === ObjectComponentKind.Image}
-    <img src={imageSrc(parsed.props)} alt="" />
+    {#if imageSource}
+      <img src={imageSource} alt="" />
+    {/if}
   {:else if parsed.kind === ObjectComponentKind.Button}
     <Button {parentId} {...parsed.props} />
   {/if}

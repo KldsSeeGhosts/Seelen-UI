@@ -3,6 +3,7 @@ brightness: Brightness
 dark_mode: Dark Mode
 default_multimedia_volume: Default Multimedia Volume
 disabled: Disabled
+display: Display
 enabled: Enabled
 eye_care: Eye Care
 fm_radio: FM Radio
@@ -12,4 +13,5 @@ light_mode: Light Mode
 mobile_broadband: Mobile Broadband
 night_light: Night Light
 power: Power
+sound: Sound
 unknown: Unknown

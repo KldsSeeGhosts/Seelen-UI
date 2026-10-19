@@ -78,56 +78,81 @@
   {#each state.radios as radio (radio.id)}
     <button
       class="radio-button"
-      data-skin={radio.isEnabled ? "solid" : "default"}
+      data-active={radio.isEnabled}
       onclick={() => toggleRadio(radio)}
       title={`${radio.name} - ${radio.isEnabled ? $t("enabled") : $t("disabled")}`}
     >
-      <Icon iconName={getRadioIcon(radio.kind)} />
-      <span class="radio-button-label">{getRadioLabel(radio.kind)}</span>
+      <span class="radio-button-icon">
+        <Icon iconName={getRadioIcon(radio.kind)} />
+      </span>
+      <span class="radio-button-text">
+        <span class="radio-button-label">{getRadioLabel(radio.kind)}</span>
+        <span class="radio-button-state">{radio.isEnabled ? $t("enabled") : $t("disabled")}</span>
+      </span>
     </button>
   {/each}
 
   {#if state.hotspot}
     <button
       class="radio-button"
-      data-skin={state.hotspot.state === HotspotState.on ? "solid" : "default"}
+      data-active={state.hotspot.state === HotspotState.on}
       disabled={state.hotspot.state === HotspotState.inTransition}
       onclick={toggleHotspot}
       title={`${$t("hotspot")} - ${state.hotspot.state === HotspotState.on ? $t("enabled") : $t("disabled")}`}
     >
-      <Icon iconName="MdWifiTethering" />
-      <span class="radio-button-label">{$t("hotspot")}</span>
+      <span class="radio-button-icon">
+        <Icon iconName="MdWifiTethering" />
+      </span>
+      <span class="radio-button-text">
+        <span class="radio-button-label">{$t("hotspot")}</span>
+        <span class="radio-button-state">
+          {state.hotspot.state === HotspotState.on ? $t("enabled") : $t("disabled")}
+        </span>
+      </span>
     </button>
   {/if}
 
   {#if hdrMonitors.length > 0}
     <button
       class="radio-button"
-      data-skin={hdrEnabled ? "solid" : "default"}
+      data-active={hdrEnabled}
       onclick={toggleHdr}
       title={`${$t("hdr")} -${hdrEnabled ? $t("enabled") : $t("disabled")}`}
     >
-      <Icon iconName="TbHdr" />
-      <span class="radio-button-label">{$t("hdr")}</span>
+      <span class="radio-button-icon">
+        <Icon iconName="TbHdr" />
+      </span>
+      <span class="radio-button-text">
+        <span class="radio-button-label">{$t("hdr")}</span>
+        <span class="radio-button-state">{hdrEnabled ? $t("enabled") : $t("disabled")}</span>
+      </span>
     </button>
   {/if}
 
-  <button
-    class="radio-button"
-    data-skin={state.darkMode ? "solid" : "default"}
-    onclick={toggleDarkMode}
-  >
-    <Icon iconName={state.darkMode ? "IoMoon" : "IoSunny"} />
-    <span class="radio-button-label">{state.darkMode ? $t("dark_mode") : $t("light_mode")}</span>
+  <button class="radio-button" data-active={state.darkMode} onclick={toggleDarkMode}>
+    <span class="radio-button-icon">
+      <Icon iconName="IoMoon" />
+    </span>
+    <span class="radio-button-text">
+      <span class="radio-button-label">{$t("dark_mode")}</span>
+      <span class="radio-button-state">{state.darkMode ? $t("enabled") : $t("disabled")}</span>
+    </span>
   </button>
 
   <button
     class="radio-button"
-    data-skin={state.nightLightEnabled ? "solid" : "default"}
+    data-active={state.nightLightEnabled}
     onclick={toggleNightLight}
     title={`${$t("night_light")} - ${state.nightLightEnabled ? $t("enabled") : $t("disabled")}`}
   >
-    <Icon iconName="IoEye" />
-    <span class="radio-button-label">{$t("eye_care")}</span>
+    <span class="radio-button-icon">
+      <Icon iconName="IoEye" />
+    </span>
+    <span class="radio-button-text">
+      <span class="radio-button-label">{$t("eye_care")}</span>
+      <span class="radio-button-state">
+        {state.nightLightEnabled ? $t("enabled") : $t("disabled")}
+      </span>
+    </span>
   </button>
 </div>

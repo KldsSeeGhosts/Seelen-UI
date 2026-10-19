@@ -20,6 +20,8 @@ use crate::{
 };
 
 const CAPTURE_WINDOW_INTERVAL: Duration = Duration::from_millis(200);
+/// Longest side of a stored preview, in pixels.
+const MAX_PREVIEW_SIZE: u32 = 640;
 /// Number of pixel samples taken evenly across the top and bottom edges of a window.
 const SAMPLING: usize = 7;
 
@@ -175,11 +177,7 @@ impl WinPreviewManager {
 
         let cropped: RgbaImage =
             image::imageops::crop_imm(&raw, crop_x, crop_y, crop_w, crop_h).to_image();
-        let image: RgbaImage = if crop_w > 1024 || crop_h > 1024 {
-            image::imageops::thumbnail(&cropped, crop_w / 2, crop_h / 2)
-        } else {
-            cropped
-        };
+        let image = downscale_preview(cropped);
 
         let colors = sample_edge_colors(&image);
 
@@ -239,6 +237,19 @@ impl WinPreviewManager {
         });
         map
     }
+}
+
+/// Shrinks the preview so its longest side is at most [`MAX_PREVIEW_SIZE`], keeping the
+/// aspect ratio. Images that already fit are returned untouched.
+fn downscale_preview(source: RgbaImage) -> RgbaImage {
+    let (width, height) = source.dimensions();
+    let longest = width.max(height);
+    if longest <= MAX_PREVIEW_SIZE {
+        return source;
+    }
+    let scaled =
+        |side: u32| ((side as u64 * MAX_PREVIEW_SIZE as u64) / longest as u64).max(1) as u32;
+    image::imageops::thumbnail(&source, scaled(width), scaled(height))
 }
 
 /// Samples SAMPLING pixels evenly spaced from left to right along the top and bottom rows.

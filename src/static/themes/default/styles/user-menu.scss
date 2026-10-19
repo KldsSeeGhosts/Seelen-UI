@@ -1,103 +1,108 @@
 .user-popup {
-  min-width: 350px;
-  max-width: 400px;
+  width: 340px;
+  min-width: 340px;
+  max-width: 340px;
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-2xs);
 
   .user-label {
-    padding: 0 var(--spacing-xs);
+    padding: var(--spacing-2xs) var(--spacing-xs);
     font-weight: 600;
     color: var(--slu-std-fg-secondary-color);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
   }
 
-  .user-profile-container {
+  .user-divider {
+    border: none;
+    height: 1px;
+    // the global `hr` reset dims dividers to 30%, this one is a neutral hairline
+    opacity: 1;
+    background-color: var(--slu-glass-edge);
+    margin: var(--spacing-2xs) var(--spacing-xs);
+  }
+
+  .user-profile {
     display: flex;
-    gap: var(--spacing-s);
-    padding: var(--spacing-2xs) 0;
+    flex-direction: column;
 
-    .user-profile-picture-container {
-      position: relative;
-      width: 70px;
-      height: 70px;
-      flex-shrink: 0;
+    .user-profile-container {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-s);
+      padding: var(--spacing-xs);
 
-      .user-profile-picture {
-        width: 100%;
-        height: 100%;
-        border-radius: 50%;
-        object-fit: cover;
-      }
+      .user-profile-picture-container {
+        width: 48px;
+        height: 48px;
+        flex-shrink: 0;
 
-      .user-profile-picture-fallback {
-        width: 100%;
-        height: 100%;
-        border-radius: 50%;
-        background-color: var(--color-gray-200);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 2rem;
-        color: var(--slu-std-fg-secondary-color);
-      }
+        .user-profile-picture {
+          width: 100%;
+          height: 100%;
+          border-radius: 50%;
+          object-fit: cover;
+        }
 
-      .user-profile-lock-button,
-      .user-profile-settings-button {
-        position: absolute;
-        bottom: -4px;
-        width: 28px;
-        height: 28px;
-        border-radius: 50%;
-        background-color: var(--slu-std-bg-color);
-        border: 2px solid var(--slu-std-bg-color);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        color: var(--slu-std-fg-secondary-color);
+        .user-profile-picture-fallback {
+          width: 100%;
+          height: 100%;
+          border-radius: 50%;
+          display: grid;
+          place-items: center;
+          background-color: var(--slu-glass-fill-pressed);
+          color: var(--slu-std-fg-color);
+          font-size: 1.25rem;
+          font-weight: 600;
 
-        &:hover {
-          background-color: var(--slu-std-bg-dark-color);
+          .svg-icon {
+            height: 1.5rem;
+          }
         }
       }
 
-      .user-profile-lock-button {
-        right: -4px;
-      }
-
-      .user-profile-settings-button {
-        left: -4px;
-      }
-    }
-
-    .user-profile-information {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: var(--spacing-2xs);
-      justify-content: center;
-
-      .user-profile-name {
+      .user-profile-information {
+        flex: 1;
+        min-width: 0;
         display: flex;
-        align-items: center;
-        gap: var(--spacing-xs);
-        font-weight: 600;
+        flex-direction: column;
+        gap: var(--spacing-2xs);
 
-        span {
-          flex: 1;
+        .user-profile-name {
+          font-size: 1rem;
+          font-weight: 600;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .user-profile-email {
+          color: var(--slu-std-fg-secondary-color);
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
       }
+    }
 
-      .user-profile-email {
+    .user-profile-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--spacing-2xs);
+      margin-top: var(--spacing-2xs);
+      padding: 0 var(--spacing-xs);
+
+      button {
+        border-radius: var(--radius-full);
+        padding: 0.25em 0.6em;
         color: var(--slu-std-fg-secondary-color);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+
+        &:hover:enabled {
+          background-color: var(--slu-glass-fill-hover);
+        }
+
+        &:active:enabled {
+          background-color: var(--slu-glass-fill-pressed);
+        }
       }
     }
   }
@@ -106,31 +111,49 @@
     display: flex;
     flex-direction: column;
     gap: var(--spacing-2xs);
-    list-style: none;
-    padding: 0;
-    margin: 0;
-
-    .user-seelen-option-item {
-      display: flex;
-      align-items: center;
-      gap: var(--spacing-xs);
-      padding: var(--spacing-xs);
-      border-radius: var(--radius-s);
-      cursor: pointer;
-
-      &:hover {
-        background-color: var(--slu-std-ui-hover-overlay);
-      }
-
-      .svg-icon {
-        color: var(--slu-std-fg-secondary-color);
-      }
-
-      .user-seelen-option-item-title {
-        flex: 1;
-      }
-    }
   }
+
+  .user-popup-footer {
+    display: flex;
+    justify-content: flex-end;
+    padding: var(--spacing-2xs) var(--spacing-xs) var(--spacing-xs);
+  }
+}
+
+// Rows of the popup: folders, seelen options and files share one neutral glass row.
+.user-directory-summary,
+.user-seelen-option-item,
+.user-file {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs);
+  border-radius: calc(var(--radius-l) - var(--spacing-xs));
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease-out;
+
+  &:hover {
+    background-color: var(--slu-glass-fill-hover);
+  }
+
+  &:active {
+    background-color: var(--slu-glass-fill-pressed);
+  }
+
+  .svg-icon {
+    color: var(--slu-std-fg-secondary-color);
+  }
+}
+
+.user-seelen-option-item-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .user-directory {
@@ -138,26 +161,35 @@
   flex-direction: column;
 
   .user-directory-summary {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-xs);
-    padding: var(--spacing-xs);
-    border-radius: var(--radius-s);
-    cursor: pointer;
     font-weight: 500;
 
-    &:hover {
-      background-color: var(--slu-std-ui-hover-overlay);
+    .user-directory-icon {
+      flex-shrink: 0;
     }
-
-    // .user-directory-icon {}
 
     .user-directory-title {
       flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    > button {
+      flex-shrink: 0;
+      border-radius: var(--radius-full);
+
+      &:hover:enabled {
+        background-color: var(--slu-glass-fill-hover);
+      }
+
+      &:active:enabled {
+        background-color: var(--slu-glass-fill-pressed);
+      }
     }
 
     .chevron {
-      transition: transform 0.2s;
+      transition: transform 120ms ease-out;
 
       &.chevron-active {
         transform: rotate(180deg);
@@ -172,20 +204,9 @@
     display: flex;
     flex-direction: column;
     gap: var(--spacing-2xs);
-    padding: var(--spacing-xs) var(--spacing-2xs) var(--spacing-2xs) var(--spacing-2xs);
+    padding: var(--spacing-2xs) 0 var(--spacing-2xs) var(--spacing-s);
 
     .user-file {
-      display: flex;
-      align-items: center;
-      gap: var(--spacing-xs);
-      padding: var(--spacing-xs);
-      border-radius: var(--radius-s);
-      cursor: pointer;
-
-      &:hover {
-        background-color: var(--slu-std-ui-hover-overlay);
-      }
-
       .user-file-icon {
         width: 1.2rem;
         height: 1.2rem;
@@ -195,6 +216,7 @@
 
       .user-file-label {
         flex: 1;
+        min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -203,20 +225,26 @@
       .user-file-date {
         color: var(--slu-std-fg-muted-color);
         flex-shrink: 0;
+        font-variant-numeric: tabular-nums;
       }
     }
 
     .user-list-extender {
       padding: var(--spacing-xs);
       text-align: center;
-      color: var(--slu-std-ui-color);
+      color: var(--slu-std-fg-secondary-color);
       background: none;
       border: none;
-      border-radius: var(--radius-s);
+      border-radius: calc(var(--radius-l) - var(--spacing-xs));
       cursor: pointer;
+      transition: background-color 120ms ease-out;
 
       &:hover {
-        background-color: var(--slu-std-ui-hover-overlay);
+        background-color: var(--slu-glass-fill-hover);
+      }
+
+      &:active {
+        background-color: var(--slu-glass-fill-pressed);
       }
     }
   }
@@ -226,7 +254,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--spacing-l);
+  padding: var(--spacing-s);
   color: var(--slu-std-fg-muted-color);
-  font-style: italic;
 }
