@@ -19,7 +19,7 @@ use crate::{
     error::{Result, ResultLogExt},
     event_manager,
     hook::HookManager,
-    modules::apps::application::UserAppsManager,
+    modules::apps::application::{UserAppWinEvent, UserAppsManager},
     state::application::FULL_STATE,
     utils::lock_free::TracedMutex,
     virtual_desktops::VdManager,
@@ -86,8 +86,15 @@ impl TwmState {
                             for w in residual {
                                 tree.add_to_floating(w);
                             }
+                        } else {
+                            log::debug!("Window manager skipped {window} during initialization");
                         }
                     }
+                    log::debug!(
+                        "Window manager initialized workspace {}: {:?}",
+                        workspace.id,
+                        tree.window_map
+                    );
                     self.state.workspaces.insert(workspace.id.clone(), tree);
                 }
             }
@@ -102,9 +109,15 @@ impl TwmState {
         });
 
         self.recompute_paused_by_monitor();
-        UserAppsManager::subscribe(|_event| {
+        UserAppsManager::subscribe(|event| {
             let mut state = WM_STATE.lock();
-            if state.recompute_paused_by_monitor() {
+            let recovered = match event {
+                UserAppWinEvent::Added(hwnd) | UserAppWinEvent::Updated(hwnd) => {
+                    state.recover_window(&Window::from(hwnd))
+                }
+                UserAppWinEvent::Removed(_) => false,
+            };
+            if state.recompute_paused_by_monitor() || recovered {
                 TwmState::send(TwmStateEvent::Changed);
             }
         });
@@ -205,6 +218,22 @@ impl TwmState {
     pub fn is_tiled(&self, window: &Window) -> bool {
         let id = window.address();
         self.state.workspaces.values().any(|t| t.is_tiled(&id))
+    }
+
+    /// Recover a window skipped during initialization or an earlier lifecycle event.
+    /// Existing floating windows are managed too, so their explicit state is preserved.
+    pub fn recover_window(&mut self, window: &Window) -> bool {
+        if self.is_managed(window) || !WindowManagerV2::should_be_managed(window.hwnd()) {
+            return false;
+        }
+        let Ok(workspace_id) = window.workspace_id() else {
+            // The desktop manager may still be processing Added. Its WindowAdded
+            // event will handle admission once the workspace association exists.
+            return false;
+        };
+        self.add_to_layout(window, &workspace_id);
+        log::debug!("Recovered {window} into window manager workspace {workspace_id}");
+        true
     }
 
     pub fn add_to_floating(&mut self, window: &Window, workspace_id: &WorkspaceId) {
@@ -829,4 +858,48 @@ pub fn twm_set_rect_to_float_initial_size(window: &Window, monitor: &Monitor) ->
             bottom: y + window_height,
         },
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recovery_preserves_an_explicitly_floating_window() {
+        let workspace_id = WorkspaceId("recovery-test".into());
+        let window = Window::from(42);
+        let mut tree = TwmRuntimeTree::new();
+        tree.add_to_floating(window.address());
+        let mut state = TwmState::default();
+        state.state.workspaces.insert(workspace_id.clone(), tree);
+
+        assert!(!state.recover_window(&window));
+        assert!(!state.recover_window(&window));
+        let tree = &state.state.workspaces[&workspace_id];
+        assert!(tree.is_floating(&window.address()));
+        assert_eq!(tree.window_map.len(), 1);
+    }
+
+    #[test]
+    fn recovery_does_not_duplicate_a_tiled_window() {
+        let workspace_id = WorkspaceId("recovery-test".into());
+        let window = Window::from(42);
+        let mut tree = TwmRuntimeTree::from_plugin(&TwmPlugin::monocle());
+        assert!(tree.add_to_tiled(window.address()).is_empty());
+        let mut state = TwmState::default();
+        state.state.workspaces.insert(workspace_id.clone(), tree);
+
+        assert!(!state.recover_window(&window));
+        let tree = &state.state.workspaces[&workspace_id];
+        assert!(tree.is_tiled(&window.address()));
+        assert_eq!(tree.window_map.len(), 1);
+        assert_eq!(tree.nodes[&tree.root].windows, vec![window.address()]);
+    }
+
+    #[test]
+    fn recovery_rejects_a_closed_window() {
+        let mut state = TwmState::default();
+        assert!(!state.recover_window(&Window::from(0)));
+        assert!(state.state.workspaces.is_empty());
+    }
 }
