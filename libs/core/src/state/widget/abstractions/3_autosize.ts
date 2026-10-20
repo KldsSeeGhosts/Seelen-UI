@@ -76,7 +76,7 @@ export class Widget_3 extends Widget_2 {
     });
   }
 
-  protected async executeAutoSize(): Promise<void> {
+  public async executeAutoSize(): Promise<void> {
     const guard = await OPTIMISTIC_FRAME.acquire();
     const { x, y, width, height } = guard.value;
 

@@ -8,7 +8,6 @@ const root = document.getElementById("root")!;
 
 await Widget.self.init({
   autoSizeByContent: root,
-  hideOnFocusLoss: true,
 });
 
 mount(App, {

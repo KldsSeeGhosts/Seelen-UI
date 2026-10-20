@@ -189,6 +189,8 @@ pub struct SeelenWegSettings {
     pub show_instance_counter: bool,
     /// enable or disable the window title visibility for opened apps
     pub show_window_title: bool,
+    /// show the preview of the open windows of an item when hovering it
+    pub hover_preview: bool,
     /// item size in px
     pub size: u32,
     /// Dock/Taskbar margin in px
@@ -219,6 +221,7 @@ impl Default for SeelenWegSettings {
             position: SeelenWegSide::Bottom,
             show_instance_counter: true,
             show_window_title: false,
+            hover_preview: true,
             temporal_items_visibility: WegTemporalItemsVisibility::All,
             pinned_items_visibility: WegPinnedItemsVisibility::Always,
             size: 40,

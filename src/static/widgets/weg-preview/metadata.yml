@@ -5,6 +5,6 @@ metadata:
   description: !extend i18n/display_name.yml
 instances: Single
 loader: Internal
-preset: Popup
+preset: Overlay
 lazy: true
 hidden: true

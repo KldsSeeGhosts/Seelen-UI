@@ -396,6 +396,7 @@ weg:
   import_success: Successfully imported {{count}} item(s) from Windows taskbar
   items:
     gap: Space Between Items
+    hover_preview: Show window previews on hover
     label: Items
     middle_click_action:
       close_app: Close App

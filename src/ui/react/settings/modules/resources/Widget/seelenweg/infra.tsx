@@ -197,6 +197,13 @@ export const SeelenWegSettings = () => {
             />
           </SettingsOption>
           <SettingsOption>
+            <div>{t("weg.items.hover_preview")}</div>
+            <Switch
+              checked={settings.hoverPreview}
+              onChange={(value) => patchWegConfig({ hoverPreview: value })}
+            />
+          </SettingsOption>
+          <SettingsOption>
             <div>{t("weg.items.show_instance_counter")}</div>
             <Switch
               checked={settings.showInstanceCounter}
