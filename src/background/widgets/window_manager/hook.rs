@@ -155,6 +155,12 @@ impl WindowManagerV2 {
                 Self::synthetic_foreground_location_change(&window)?;
             }
             WinEvent::SystemMoveSizeEnd => {
+                if window.crossed_monitor_while_dragging() {
+                    // The higher-priority desktop handler has queued WindowMoved, which
+                    // will retile both workspaces. Do not resize from a DPI-induced size
+                    // change or reapply the old tree while that event is still queued.
+                    return Ok(());
+                }
                 Self::system_move_size_end(&window)?;
                 Self::force_retiling()?;
             }

@@ -501,6 +501,11 @@ impl WindowAnimation {
         }
 
         drop(cloak);
+        // Chromium suppresses rendering while cloaked. Request a fresh surface after
+        // uncloaking even when a manual resize already left the HWND at its target.
+        if !interrupted && data.is_chromium {
+            let _ = force_redraw_window(data.hwnd);
+        }
         drop(overlay);
 
         if !interrupted {

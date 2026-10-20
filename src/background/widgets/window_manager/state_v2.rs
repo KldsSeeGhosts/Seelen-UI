@@ -461,13 +461,17 @@ impl TwmState {
                     let node_of_window_id = parent.children[child_idx];
                     let tree_mut = self.state.workspaces.get_mut(&workspace_id).unwrap();
 
-                    let total_pie: f32 = sibling_ids
+                    let sibling_portions: Vec<f32> = sibling_ids
                         .iter()
                         .map(|&id| tree_mut.nodes[&id].grow_factor)
-                        .sum();
+                        .collect();
                     let window_portion = tree_mut.nodes[&node_of_window_id].grow_factor;
-                    let to_grow =
-                        if relative { window_portion } else { total_pie } * percentage / 100.0;
+                    let to_grow = super::resize::resize_delta(
+                        window_portion,
+                        &sibling_portions,
+                        percentage,
+                        relative,
+                    );
                     let to_reduce = to_grow / sibling_ids.len() as f32;
 
                     tree_mut
