@@ -1,23 +1,25 @@
 <script lang="ts">
   import { invoke, SeelenCommand } from "@seelen-ui/lib";
-  import { Icon } from "libs/ui/svelte/components/Icon";
+  import Icon from "libs/ui/svelte/components/Icon/Icon.svelte";
   import { state } from "../state.svelte";
-  import { throttle } from "lodash";
   import { t } from "../i18n";
+  import SliderInput from "./SliderInput.svelte";
 
   let defaultOutput = $derived(state.mediaOutputs.find((d) => d.isDefaultMultimedia));
   let defaultInput = $derived(state.mediaInputs.find((d) => d.isDefaultMultimedia));
 
-  const setVolumeThrottled = throttle((deviceId: string, level: number) => {
-    invoke(SeelenCommand.SetVolumeLevel, {
+  function toggleMute(deviceId: string) {
+    invoke(SeelenCommand.MediaToggleMute, { deviceId, sessionId: null }).catch((error) => {
+      console.error("Failed to toggle the mute state:", error);
+    });
+  }
+
+  function setVolume(deviceId: string, percentage: number) {
+    return invoke(SeelenCommand.SetVolumeLevel, {
       deviceId,
       sessionId: null,
-      level,
+      level: percentage / 100,
     });
-  }, 100);
-
-  function toggleMute(deviceId: string) {
-    invoke(SeelenCommand.MediaToggleMute, { deviceId, sessionId: null });
   }
 </script>
 
@@ -26,43 +28,33 @@
     <span class="quick-settings-module-title">{$t("sound")}</span>
 
     {#if defaultOutput}
+      {#key defaultOutput.id}
       <div class="quick-settings-item">
         <button data-skin="transparent" onclick={() => toggleMute(defaultOutput!.id)}>
           <Icon iconName={defaultOutput.muted ? "IoVolumeMuteOutline" : "IoVolumeHighOutline"} />
         </button>
-        <input
-          type="range"
-          data-skin="flat"
+        <SliderInput
           value={defaultOutput.volume * 100}
-          oninput={(e) => {
-            setVolumeThrottled(defaultOutput.id, Number(e.currentTarget.value) / 100);
-          }}
-          min={0}
-          max={100}
-          step={1}
+          commit={(percentage) => setVolume(defaultOutput!.id, percentage)}
+          showPercentage
         />
-        <span class="quick-settings-percentage">{Math.round(defaultOutput.volume * 100)}%</span>
       </div>
+      {/key}
     {/if}
 
     {#if defaultInput}
+      {#key defaultInput.id}
       <div class="quick-settings-item">
         <button data-skin="transparent" onclick={() => toggleMute(defaultInput!.id)}>
           <Icon iconName={defaultInput.muted ? "BiMicrophoneOff" : "BiMicrophone"} />
         </button>
-        <input
-          type="range"
-          data-skin="flat"
+        <SliderInput
           value={defaultInput.volume * 100}
-          oninput={(e) => {
-            setVolumeThrottled(defaultInput.id, Number(e.currentTarget.value) / 100);
-          }}
-          min={0}
-          max={100}
-          step={1}
+          commit={(percentage) => setVolume(defaultInput!.id, percentage)}
+          showPercentage
         />
-        <span class="quick-settings-percentage">{Math.round(defaultInput.volume * 100)}%</span>
       </div>
+      {/key}
     {/if}
   </section>
 {/if}

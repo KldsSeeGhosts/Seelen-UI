@@ -42,8 +42,8 @@ function translate(locale: string, key: string, vars: Record<string, string> = {
 }
 
 export const t = derived(
-  _locale,
-  (locale) => (key: string, vars?: Record<string, string>) => translate(locale, key, vars),
+  [_locale, _messages],
+  ([locale]) => (key: string, vars?: Record<string, string>) => translate(locale, key, vars),
 );
 
 async function loadLocale(locale: string) {

@@ -6,7 +6,7 @@
   import UserProfile from "./components/UserProfile.svelte";
   import UserFolder from "./components/UserFolder.svelte";
   import { path } from "@tauri-apps/api";
-  import { knownFolders } from "./state/knownFolders.svelte";
+  import { folderDefinitions } from "./state/knownFolders.svelte";
 
   $effect(() => {
     Widget.getCurrent().ready();
@@ -26,12 +26,16 @@
 </script>
 
 <div class="slu-std-popover user-popup">
-  <UserProfile user={globalState.user} />
+  <UserProfile
+    user={globalState.user}
+    status={globalState.userStatus}
+    onRetry={() => globalState.retryUser()}
+  />
 
   <hr class="user-divider" />
   <span class="user-label">{$t("folders.title")}</span>
-  {#each Object.entries(knownFolders.value) as folder (folder[0])}
-    <UserFolder type={folder[0] as any} {...folder[1]} />
+  {#each folderDefinitions as folder (folder.type)}
+    <UserFolder type={folder.type} icon={folder.icon} />
   {/each}
 
   <hr class="user-divider" />

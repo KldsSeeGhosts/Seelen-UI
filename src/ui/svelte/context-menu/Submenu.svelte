@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke, SeelenCommand } from "@seelen-ui/lib";
   import { type ContextMenuItem, Alignment } from "@seelen-ui/lib/types";
-  import { Icon } from "libs/ui/svelte/components/Icon";
+  import Icon from "libs/ui/svelte/components/Icon/Icon.svelte";
   import { state } from "./state.svelte";
 
   interface SubmenuProps {
@@ -24,7 +24,7 @@
   }
 </script>
 
-<button class="menu-item" data-skin="transparent" onclick={handleClick}>
+<button class="menu-item" data-skin="transparent" role="menuitem" aria-haspopup="menu" data-submenu onclick={handleClick}>
   {#if item.icon?.startsWith("http://asset.localhost")}
     <img class="menu-item-img-icon" src={item.icon} alt="" />
   {:else}

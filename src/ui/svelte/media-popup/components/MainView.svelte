@@ -18,6 +18,7 @@
     </span>
 
     {#if globalState.defaultOutput}
+      {#key globalState.defaultOutput.id}
       <VolumeControl
         value={globalState.defaultOutput.volume}
         deviceId={globalState.defaultOutput.id}
@@ -26,9 +27,11 @@
         muted={globalState.defaultOutput.muted}
         onRightAction={() => setViewDeviceId(globalState.defaultOutput!.id)}
       />
+      {/key}
     {/if}
 
     {#if globalState.defaultInput}
+      {#key globalState.defaultInput.id}
       <VolumeControl
         value={globalState.defaultInput.volume}
         deviceId={globalState.defaultInput.id}
@@ -37,6 +40,7 @@
         muted={globalState.defaultInput.muted}
         onRightAction={() => setViewDeviceId(globalState.defaultInput!.id)}
       />
+      {/key}
     {/if}
   {/if}
 

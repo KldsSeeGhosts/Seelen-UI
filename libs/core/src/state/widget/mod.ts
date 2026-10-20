@@ -101,12 +101,20 @@ export class Widget extends WidgetBasics {
 
   /** Will apply the recommended settings for a popup widget */
   private applyPopupPreset(): void {
-    this.onTrigger(async ({ desiredPosition, alignX, alignY }) => {
+    this.onTrigger(async ({ desiredPosition, alignX, alignY, customArgs }) => {
+      if (customArgs?.toggle === true && this.isVisible) {
+        await this.hide();
+        return;
+      }
       if (desiredPosition) {
         await this.adjustAndSetPosition(desiredPosition.x, desiredPosition.y, alignX, alignY);
       }
       await this.show();
       await this.focus();
+      const initialControl = document.querySelector<HTMLElement>(
+        "[autofocus], button:not(:disabled), input:not(:disabled), [tabindex='0']",
+      );
+      initialControl?.focus({ preventScroll: true });
       // After positioning, re-run the autosizer to correct any size discrepancy. The trigger
       // reads OPTIMISTIC_FRAME which may be stale: onResized events from prior async resizes
       // can arrive before the trigger fires and roll back the optimistic size to an intermediate
@@ -117,6 +125,17 @@ export class Widget extends WidgetBasics {
         await this.executeAutoSize();
       }
     });
+
+    globalThis.window.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || event.isComposing || !this.isVisible) return;
+      // App-level handlers can consume Escape for navigation before the popup closes.
+      queueMicrotask(() => {
+        if (!event.defaultPrevented && this.isVisible) {
+          event.preventDefault();
+          this.hide();
+        }
+      });
+    });
   }
 
   private hideOnFocusLoss(): void {
@@ -125,6 +144,7 @@ export class Widget extends WidgetBasics {
     const hideDelayed = debounce(() => {
       this.hide();
     }, 100);
+    this.onTrigger(() => hideDelayed.cancel());
 
     subscribe(SeelenEvent.GlobalFocusChanged, ({ payload: focused }) => {
       if (focused.hwnd !== this.windowId && focused.ownerHwnd !== this.windowId) {
@@ -212,15 +232,19 @@ export class Widget extends WidgetBasics {
     }
 
     this.runtimeState.initialized = true;
-    await this.prepare();
-
     this._destroyOnHide = options.closeOnHide ?? this.def.lazy;
+
+    await Promise.all([
+      this.prepare(),
+      initMonitorsState(),
+      options.useThemes ?? true ? startThemingTool() : Promise.resolve(),
+      options.disableCssAnimations ?? true ? disableAnimationsOnPerformanceMode() : Promise.resolve(),
+    ]);
 
     if (options.normalizeDevicePixelRatio) {
       await this.normalizeDevicePixelRatio();
     }
 
-    await initMonitorsState();
     await OPTIMISTIC_FRAME.runExclusive((state) => {
       state.init(this);
     });
@@ -250,16 +274,6 @@ export class Widget extends WidgetBasics {
         this.applyPopupPreset();
         break;
     }
-
-    if (options.useThemes ?? true) {
-      await startThemingTool();
-    }
-
-    if (options.disableCssAnimations ?? true) {
-      await disableAnimationsOnPerformanceMode();
-    } else {
-      console.trace("Animations won't be disabled because widget configuration");
-    }
   }
 
   /** Tasks to be executed before the widget be marked as ready */
@@ -285,6 +299,7 @@ export class Widget extends WidgetBasics {
     const { show = !this.def.lazy } = options;
 
     const alreadyVisible = await this.window.isVisible();
+    this.updateVisibility(alreadyVisible);
     globalThis.document.documentElement.toggleAttribute("data-widget-hidden", !alreadyVisible);
     // pre-compute styles
     globalThis.getComputedStyle(globalThis.document.documentElement).opacity;
@@ -298,6 +313,9 @@ export class Widget extends WidgetBasics {
     }
 
     globalThis.document.documentElement.dataset.widgetReady = "";
+    // A cancelled cold trigger may never show this window. It still needs the same
+    // expiry as a hidden lazy popup; show() cancels it when a trigger is delivered.
+    this.scheduleCloseWhenHidden();
     // this will mark the widget as ready, and send pending trigger event if exists
     await invoke(SeelenCommand.SetCurrentWidgetStatus, { status: WidgetStatus.Ready });
 

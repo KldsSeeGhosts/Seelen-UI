@@ -121,7 +121,7 @@
 }
 
 // Rows of the popup: folders, seelen options and files share one neutral glass row.
-.user-directory-summary,
+.user-directory-open,
 .user-seelen-option-item,
 .user-file {
   width: 100%;
@@ -161,7 +161,16 @@
   flex-direction: column;
 
   .user-directory-summary {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
     font-weight: 500;
+
+    .user-directory-open {
+      flex: 1;
+      min-width: 0;
+      font-weight: 500;
+    }
 
     .user-directory-icon {
       flex-shrink: 0;
@@ -175,7 +184,7 @@
       white-space: nowrap;
     }
 
-    > button {
+    > .user-directory-expand {
       flex-shrink: 0;
       border-radius: var(--radius-full);
 
@@ -252,8 +261,10 @@
 
 .user-empty-list {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  gap: var(--spacing-xs);
   padding: var(--spacing-s);
   color: var(--slu-std-fg-muted-color);
+  text-align: center;
 }

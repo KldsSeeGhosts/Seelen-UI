@@ -70,21 +70,45 @@
     }
   }
 
+  // Progressive rendering: only the first chunk is mounted immediately, the rest is
+  // appended on idle. Every rerun/mount owns its own render loop and cancels the
+  // pending idle callback, so fast query changes cannot leave stale loops behind.
+  const RENDER_CHUNK = 15;
+
   $effect(() => {
-    visibleItems = [];
+    const items = searchState.searchedItems;
+    let rendered = Math.min(RENDER_CHUNK, items.length);
+    let idleHandle: number | null = null;
+    let disposed = false;
 
-    let i = 0;
-    const chunk = 15;
+    visibleItems = items.slice(0, rendered);
 
-    function process() {
-      visibleItems = searchState.searchedItems.slice(0, (i += chunk));
-
-      if (i < searchState.searchedItems.length) {
-        requestIdleCallback(process);
+    function renderNextChunk() {
+      idleHandle = null;
+      if (disposed) {
+        return;
       }
+      rendered = Math.min(rendered + RENDER_CHUNK, items.length);
+      visibleItems = items.slice(0, rendered);
+      scheduleNextChunk();
     }
 
-    process();
+    function scheduleNextChunk() {
+      if (disposed || rendered >= items.length) {
+        return;
+      }
+      idleHandle = requestIdleCallback(renderNextChunk);
+    }
+
+    scheduleNextChunk();
+
+    return () => {
+      disposed = true;
+      if (idleHandle !== null) {
+        cancelIdleCallback(idleHandle);
+        idleHandle = null;
+      }
+    };
   });
 </script>
 

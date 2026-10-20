@@ -89,9 +89,10 @@ export class IconPackManager {
    * @returns A new instance of IconPackManager
    */
   public static async create(): Promise<IconPackManager> {
+    const [packs, settings] = await Promise.all([IconPackList.getAsync(), Settings.getAsync()]);
     const instance = new IconPackManager(
-      (await IconPackList.getAsync()).asArray(),
-      (await Settings.getAsync()).inner.activeIconPacks,
+      packs.asArray(),
+      settings.inner.activeIconPacks,
     );
     instance.resolveAvailableIcons();
     instance.cacheActiveIconPacks();

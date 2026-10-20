@@ -1,13 +1,16 @@
 <script lang="ts">
   import { invoke, SeelenCommand } from "@seelen-ui/lib";
   import { HotspotState, RadioDeviceKind, type RadioDevice } from "@seelen-ui/lib/types";
-  import { Icon } from "libs/ui/svelte/components/Icon";
-  import { state } from "../state.svelte";
+  import Icon from "libs/ui/svelte/components/Icon/Icon.svelte";
+  import { state, type SectionStatus } from "../state.svelte";
   import type { IconName } from "libs/ui/icons";
   import { t } from "../i18n";
 
   const hdrMonitors = $derived(state.monitors.filter((m) => m.hdr !== null && m.hdr !== undefined));
   const hdrEnabled = $derived(hdrMonitors.length > 0 && hdrMonitors.every((m) => m.hdr));
+
+  const darkModeStatus = $derived(state.darkModeStatus);
+  const nightLightStatus = $derived(state.nightLightStatus);
 
   function getRadioIcon(kind: RadioDeviceKind): IconName {
     switch (kind) {
@@ -39,6 +42,17 @@
     }
   }
 
+  function statusLabel(status: SectionStatus, active: boolean): string {
+    switch (status) {
+      case "loading":
+        return $t("loading");
+      case "error":
+        return $t("unavailable");
+      case "ready":
+        return active ? $t("enabled") : $t("disabled");
+    }
+  }
+
   async function toggleRadio(radio: RadioDevice) {
     await invoke(SeelenCommand.SetRadioState, {
       kind: radio.kind,
@@ -67,10 +81,14 @@
   }
 
   async function toggleNightLight() {
+    if (nightLightStatus !== "ready") return;
     const enabled = !state.nightLightEnabled;
-    invoke(SeelenCommand.SystemSetNightLightEnabled, { enabled }).then(() => {
+    try {
+      await invoke(SeelenCommand.SystemSetNightLightEnabled, { enabled });
       state.nightLightEnabled = enabled;
-    });
+    } catch (error) {
+      console.error("quick-settings: failed to change the night light", error);
+    }
   }
 </script>
 
@@ -129,21 +147,28 @@
     </button>
   {/if}
 
-  <button class="radio-button" data-active={state.darkMode} onclick={toggleDarkMode}>
+  <button
+    class="radio-button"
+    data-active={darkModeStatus === "ready" && state.darkMode}
+    disabled={darkModeStatus !== "ready"}
+    onclick={toggleDarkMode}
+    title={`${$t("dark_mode")} - ${statusLabel(darkModeStatus, state.darkMode)}`}
+  >
     <span class="radio-button-icon">
       <Icon iconName="IoMoon" />
     </span>
     <span class="radio-button-text">
       <span class="radio-button-label">{$t("dark_mode")}</span>
-      <span class="radio-button-state">{state.darkMode ? $t("enabled") : $t("disabled")}</span>
+      <span class="radio-button-state">{statusLabel(darkModeStatus, state.darkMode)}</span>
     </span>
   </button>
 
   <button
     class="radio-button"
-    data-active={state.nightLightEnabled}
+    data-active={nightLightStatus === "ready" && state.nightLightEnabled}
+    disabled={nightLightStatus !== "ready"}
     onclick={toggleNightLight}
-    title={`${$t("night_light")} - ${state.nightLightEnabled ? $t("enabled") : $t("disabled")}`}
+    title={`${$t("night_light")} - ${statusLabel(nightLightStatus, state.nightLightEnabled)}`}
   >
     <span class="radio-button-icon">
       <Icon iconName="IoEye" />
@@ -151,8 +176,25 @@
     <span class="radio-button-text">
       <span class="radio-button-label">{$t("eye_care")}</span>
       <span class="radio-button-state">
-        {state.nightLightEnabled ? $t("enabled") : $t("disabled")}
+        {statusLabel(nightLightStatus, state.nightLightEnabled)}
       </span>
     </span>
   </button>
+
+  {#if state.radioControlsFailed}
+    <button
+      class="radio-button"
+      onclick={() => state.retryRadioControls()}
+      title={$t("retry")}
+      aria-label={$t("retry")}
+    >
+      <span class="radio-button-icon">
+        <Icon iconName="TbRefresh" />
+      </span>
+      <span class="radio-button-text">
+        <span class="radio-button-label">{$t("retry")}</span>
+        <span class="radio-button-state">{$t("load_failed")}</span>
+      </span>
+    </button>
+  {/if}
 </div>

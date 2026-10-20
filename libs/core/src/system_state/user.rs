@@ -42,6 +42,17 @@ pub struct FolderChangedArgs {
 #[cfg_attr(all(feature = "gen-binds", not(feature = "salvo")), derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(all(feature = "gen-binds", not(feature = "salvo")), ts(export))]
+pub struct UserFolderSnapshot {
+    pub content: Vec<PathBuf>,
+    /// `true` while the first background scan of the folder is still running, meaning
+    /// `content` is not final yet (and must not be read as an empty folder).
+    pub is_loading: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(all(feature = "gen-binds", not(feature = "salvo")), derive(ts_rs::TS))]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(all(feature = "gen-binds", not(feature = "salvo")), ts(export))]
 pub struct User {
     pub name: String,
     pub domain: String,

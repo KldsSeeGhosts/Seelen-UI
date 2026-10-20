@@ -71,35 +71,59 @@ export interface FavAppItem {
 
 export type FavPinnedItem = FavAppItem | FavFolderItem;
 
-const initialState: FavPinnedItem[] = [];
+const FAVORITES_STORE_KEY = "favorites";
 
-try {
-  const layout = await invoke(SeelenCommand.GetNativeStartMenu);
-  for (const _item of layout.pinnedList) {
-    const item = _item as StartMenuLayoutItem as any;
-    if (item.desktopAppLink) {
-      let path = item.desktopAppLink.toLowerCase();
-      const found = startMenuItems.value.find((i) => i.path.toLowerCase() === path);
-
-      if (found) {
-        initialState.push({
-          type: "app",
-          itemId: getItemId(found),
-        });
-        continue;
-      }
-    }
-
-    initialState.push({
-      type: "app",
-      itemId: item.packagedAppId || item.destopAppId || item.desktopAppLink,
+/**
+ * Reads the saved favorites without creating the rune, so the native Windows pinned layout is
+ * only requested when there is nothing saved. An intentionally empty list is valid and kept.
+ */
+async function readPersistedFavorites(): Promise<FavPinnedItem[] | null> {
+  try {
+    const content = await invoke(SeelenCommand.ReadFile, {
+      filename: `${FAVORITES_STORE_KEY}.json`,
     });
+    const parsed: unknown = JSON.parse(content);
+    return Array.isArray(parsed) ? (parsed as FavPinnedItem[]) : null;
+  } catch {
+    // no file yet or unreadable content, the native layout is the fallback
+    return null;
   }
-} catch (error) {
-  console.error("Failed to get native pinned items:", error);
 }
 
-const pinnedItems = await persistentRune<FavPinnedItem[]>("favorites", initialState);
+async function getNativePinnedItems(): Promise<FavPinnedItem[]> {
+  const items: FavPinnedItem[] = [];
+
+  try {
+    const layout = await invoke(SeelenCommand.GetNativeStartMenu);
+    for (const _item of layout.pinnedList) {
+      const item = _item as StartMenuLayoutItem as any;
+      if (item.desktopAppLink) {
+        let path = item.desktopAppLink.toLowerCase();
+        const found = startMenuItems.value.find((i) => i.path.toLowerCase() === path);
+
+        if (found) {
+          items.push({
+            type: "app",
+            itemId: getItemId(found),
+          });
+          continue;
+        }
+      }
+
+      items.push({
+        type: "app",
+        itemId: item.packagedAppId || item.destopAppId || item.desktopAppLink,
+      });
+    }
+  } catch (error) {
+    console.error("Failed to get native pinned items:", error);
+  }
+
+  return items;
+}
+
+const initialState = (await readPersistedFavorites()) ?? (await getNativePinnedItems());
+const pinnedItems = await persistentRune<FavPinnedItem[]>(FAVORITES_STORE_KEY, initialState);
 
 // Get unique identifier for an item
 function getItemId(item: StartMenuItem): string {

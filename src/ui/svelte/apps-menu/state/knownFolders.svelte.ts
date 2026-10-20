@@ -9,7 +9,7 @@ const music = lazyRune(() => invoke(SeelenCommand.GetUserFolderContent, { folder
 const pictures = lazyRune(() => invoke(SeelenCommand.GetUserFolderContent, { folderType: FolderType.Pictures }));
 const videos = lazyRune(() => invoke(SeelenCommand.GetUserFolderContent, { folderType: FolderType.Videos }));
 
-subscribe(SeelenEvent.UserFolderChanged, ({ payload: { ofFolder, content } }) => {
+await subscribe(SeelenEvent.UserFolderChanged, ({ payload: { ofFolder, content } }) => {
   switch (ofFolder) {
     case FolderType.Desktop:
       desktop.value = content;
