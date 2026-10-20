@@ -9,7 +9,7 @@
 
   $effect(() => {
     if (previewState.currentInteractables.length === 0) {
-      Widget.self.hide();
+      previewState.close();
     }
   });
 

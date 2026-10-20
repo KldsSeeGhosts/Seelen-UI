@@ -7,7 +7,7 @@
   import { settingsState } from "../../state/settings.svelte.ts";
   import { windowsState, focused } from "../../state/windows.svelte.ts";
   import { getUserApplicationContextMenu, launchItem } from "../../appMenu.ts";
-  import { triggerPreviewWidget } from "../../previewWidget.ts";
+  import { cancelHoverPreview, scheduleHoverPreview, triggerPreviewWidget } from "../../previewWidget.ts";
   import { CssHandled } from "libs/ui/svelte/utils/animations.ts";
   import { getBadge } from "../../state/badge.svelte.ts";
   import Icon from "libs/ui/svelte/components/Icon/Icon.svelte";
@@ -34,7 +34,17 @@
 
   let itemEl: HTMLDivElement | null = $state(null);
 
+  // the preview replaces the tooltip: its cards already show the window titles
+  const hasHoverPreview = $derived(!!settings?.hoverPreview && windows.length > 0);
+
+  function onPointerEnter(e: PointerEvent) {
+    // no previews while dragging an item or on touch
+    if (!hasHoverPreview || e.pointerType !== "mouse" || e.buttons !== 0) return;
+    scheduleHoverPreview(itemEl!, () => windows);
+  }
+
   function onClick() {
+    cancelHoverPreview();
     if (windows.length > 1) {
       triggerPreviewWidget(itemEl!, windows);
       return;
@@ -63,6 +73,7 @@
 
   function onContextMenu(e: MouseEvent) {
     e.stopPropagation();
+    cancelHoverPreview();
     const alignX = settingsState.popupAlignX;
     const alignY = settingsState.popupAlignY;
     invoke(SeelenCommand.TriggerContextMenu, {
@@ -77,11 +88,13 @@
     role="menuitem"
     tabindex="0"
     class="weg-item"
-    data-tooltip={item.displayName}
+    data-tooltip={hasHoverPreview ? undefined : item.displayName}
     data-tooltip-origin-y={settingsState.tooltipOrigin.y}
     data-tooltip-origin-x={settingsState.tooltipOrigin.x}
     data-tooltip-align-x={settingsState.popupAlignX}
     data-tooltip-align-y={settingsState.popupAlignY}
+    onpointerenter={onPointerEnter}
+    onpointerleave={cancelHoverPreview}
     onclick={onClick}
     onauxclick={onAuxClick}
     oncontextmenu={onContextMenu}
