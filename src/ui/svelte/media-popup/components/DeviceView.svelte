@@ -49,6 +49,7 @@
   </div>
 
   {#if !!device}
+    {#key device.id}
     <span class="media-control-label">{$t("device.volume")}</span>
     <VolumeControl
       deviceId={device.id}
@@ -89,5 +90,6 @@
         {$t("device.settings")}
       </button>
     </div>
+    {/key}
   {/if}
 </div>

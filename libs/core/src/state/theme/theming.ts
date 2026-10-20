@@ -9,26 +9,46 @@ import { registerPerformanceStyles } from "../widget/performance.ts";
  * when the themes or settings change. Also will add the systehm ui colors to the document.
  */
 export async function startThemingTool(): Promise<void> {
-  let settings = await Settings.getAsync();
-  let themes = await ThemeList.getAsync();
+  let settings: Settings | undefined;
+  let themes: ThemeList | undefined;
+  let colorsChanged = false;
 
-  await ThemeList.onChange((newThemes) => {
-    themes = newThemes;
-    themes.applyToDocument(settings.activeThemes, settings.byTheme);
-  });
+  function applyThemes(): void {
+    if (settings && themes) {
+      themes.applyToDocument(settings.activeThemes, settings.byTheme);
+    }
+  }
 
-  await Settings.onChange((newSettings) => {
-    settings = newSettings;
-    themes.applyToDocument(settings.activeThemes, settings.byTheme);
-  });
+  await Promise.all([
+    ThemeList.onChange((newThemes) => {
+      themes = newThemes;
+      applyThemes();
+    }),
+    Settings.onChange((newSettings) => {
+      settings = newSettings;
+      applyThemes();
+    }),
+    UIColors.onChange((colors) => {
+      colorsChanged = true;
+      colors.setAsCssVariables();
+    }),
+  ]);
+
+  const [initialSettings, initialThemes, initialColors] = await Promise.all([
+    Settings.getAsync(),
+    ThemeList.getAsync(),
+    UIColors.getAsync(),
+  ]);
+  settings ??= initialSettings;
+  themes ??= initialThemes;
 
   registerPerformanceStyles();
   startDateCssVariables();
 
-  (await UIColors.getAsync()).setAsCssVariables();
-  await UIColors.onChange((colors) => colors.setAsCssVariables());
-
-  themes.applyToDocument(settings.activeThemes, settings.byTheme);
+  if (!colorsChanged) {
+    initialColors.setAsCssVariables();
+  }
+  applyThemes();
 }
 
 function startDateCssVariables(): void {

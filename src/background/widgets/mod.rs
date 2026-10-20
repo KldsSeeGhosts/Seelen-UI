@@ -20,8 +20,8 @@ use seelen_core::{
     handlers::SeelenEvent,
     resource::ResourceId,
     state::{
-        Alignment, WidgetDebugInfo, WidgetInstanceMode, WidgetStatus, WidgetTriggerPayload,
-        context_menu::ContextMenu, dialog::Dialog,
+        Alignment, WidgetDebugInfo, WidgetInstanceMode, WidgetPreset, WidgetStatus,
+        WidgetTriggerPayload, context_menu::ContextMenu, dialog::Dialog,
     },
     system_state::{AppBarEdge, ZOrder},
 };
@@ -38,11 +38,18 @@ use crate::{
     windows_api::{
         AppBarData, WindowsApi,
         input::{Keyboard, Mouse},
+        window::Window,
     },
 };
 
-static PENDING_TRIGGERS: LazyLock<SyncHashMap<WidgetWebviewLabel, WidgetTriggerPayload>> =
+static PENDING_TRIGGERS: LazyLock<SyncHashMap<WidgetWebviewLabel, PendingTrigger>> =
     LazyLock::new(SyncHashMap::new);
+
+struct PendingTrigger {
+    payload: WidgetTriggerPayload,
+    /// Toolbar popups must not take focus after the user has switched to another window.
+    originating_window: Option<isize>,
+}
 
 fn trigger_widget_inner(
     mut payload: WidgetTriggerPayload,
@@ -64,6 +71,19 @@ fn trigger_widget_inner(
         monitor_id.as_deref(),
         payload.instance_id.as_ref(),
     );
+
+    let toolbar_popup = widget.preset == WidgetPreset::Popup
+        && payload
+            .custom_args
+            .as_ref()
+            .and_then(|args| args.get("toggle"))
+            .is_some_and(|toggle| toggle.0.as_bool() == Some(true));
+    if toolbar_popup {
+        // Only the newest toolbar popup should open after asynchronous initialization.
+        PENDING_TRIGGERS.retain(|(pending_label, pending)| {
+            pending_label == &label || pending.originating_window.is_none()
+        });
+    }
 
     match widget.instances {
         WidgetInstanceMode::Single => {}
@@ -103,7 +123,13 @@ fn trigger_widget_inner(
 
     if !WIDGET_MANAGER.is_ready(&label) {
         log::trace!("Trigger postponed, because widget instance is not ready: {label}");
-        PENDING_TRIGGERS.upsert(label.clone(), payload);
+        PENDING_TRIGGERS.upsert(
+            label.clone(),
+            PendingTrigger {
+                payload,
+                originating_window: toolbar_popup.then(|| Window::get_foregrounded().address()),
+            },
+        );
 
         WIDGET_MANAGER.deployments.get(&label.widget_id, |c| {
             c.start_webview(&label);
@@ -202,11 +228,19 @@ impl crate::tauri_handlers::Handlers {
         status: WidgetStatus,
     ) -> Result<()> {
         let label = WidgetWebviewLabel::try_from_raw(webview.label())?;
+        let ready = status == WidgetStatus::Ready;
         WIDGET_MANAGER.set_status(&label, status);
 
-        if let Some(pending) = PENDING_TRIGGERS.remove(&label) {
+        if ready && let Some(pending) = PENDING_TRIGGERS.remove(&label) {
+            if pending
+                .originating_window
+                .is_some_and(|origin| origin != Window::get_foregrounded().address())
+            {
+                log::trace!("Discarding superseded toolbar popup trigger for {label}");
+                return Ok(());
+            }
             log::info!("Emitting pending trigger for {label}");
-            get_app_handle().emit_to(label.raw, SeelenEvent::WidgetTriggered, &pending)?;
+            get_app_handle().emit_to(label.raw, SeelenEvent::WidgetTriggered, &pending.payload)?;
         }
         Ok(())
     }

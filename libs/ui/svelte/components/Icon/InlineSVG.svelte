@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { ClassValue } from "svelte/elements";
-  import { fetchSVG, svgs } from "./InlineSVGState.svelte";
+  import { inlineSVGState } from "./InlineSVGState.svelte";
 
   interface Props {
     src: string;
@@ -10,10 +10,10 @@
 
   let { src, class: className, ...rest }: Props = $props();
 
-  let svgContent = $derived(svgs[src]);
+  let svgContent = $derived(inlineSVGState.get(src));
 
   $effect(() => {
-    fetchSVG(src);
+    inlineSVGState.fetch(src);
   });
 </script>
 

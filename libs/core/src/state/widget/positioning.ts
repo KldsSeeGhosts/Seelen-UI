@@ -12,12 +12,29 @@ interface args {
 const monitors = {
   value: [] as PhysicalMonitor[],
 };
+let initialization: Promise<void> | undefined;
 
-export async function initMonitorsState(): Promise<void> {
-  monitors.value = await invoke(SeelenCommand.SystemGetMonitors);
-  subscribe(SeelenEvent.SystemMonitorsChanged, ({ payload }) => {
-    monitors.value = payload;
+export function initMonitorsState(): Promise<void> {
+  initialization ??= (async () => {
+    let changed = false;
+    const unlisten = await subscribe(SeelenEvent.SystemMonitorsChanged, ({ payload }) => {
+      changed = true;
+      monitors.value = payload;
+    });
+    try {
+      const initial = await invoke(SeelenCommand.SystemGetMonitors);
+      if (!changed) {
+        monitors.value = initial;
+      }
+    } catch (error) {
+      unlisten();
+      throw error;
+    }
+  })().catch((error) => {
+    initialization = undefined;
+    throw error;
   });
+  return initialization;
 }
 
 function distanceToMonitor(x: number, y: number, { rect }: PhysicalMonitor): number {

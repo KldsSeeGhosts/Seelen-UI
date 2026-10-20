@@ -30,10 +30,30 @@ let hotspot = lazyRune(() => invoke(SeelenCommand.GetNetworkHotspot));
 subscribe(SeelenEvent.NetworkHotspotChanged, hotspot.setByPayload);
 await hotspot.init();
 
+/** Delay between WLAN scans while the popup is focused. */
+const SCAN_INTERVAL_MS = 2000;
+
 let isScanning = $state(false);
 let selectedSsid = $state<string | null>(null);
-let scanInterval: ReturnType<typeof setInterval> | null = null;
 let currentView = $state<"main" | "hotspot">("main");
+
+// A scan can take longer than the interval, so only one can be in flight at a time.
+let isScanInFlight = false;
+
+async function requestScan() {
+  if (isScanInFlight) {
+    return;
+  }
+
+  isScanInFlight = true;
+  try {
+    await invoke(SeelenCommand.WlanScan);
+  } catch (error) {
+    console.error("Failed to scan for WLAN networks:", error);
+  } finally {
+    isScanInFlight = false;
+  }
+}
 
 widget.window.onFocusChanged((e) => {
   if (e.payload) {
@@ -51,16 +71,13 @@ $effect.root(() => {
       (radio) => radio.kind === RadioDeviceKind.WiFi && radio.isEnabled,
     );
 
-    if (isScanning && wifiEnabled) {
-      invoke(SeelenCommand.WlanScan);
-      scanInterval = setInterval(() => invoke(SeelenCommand.WlanScan), 2000);
+    if (!isScanning || !wifiEnabled) {
       return;
     }
 
-    if (scanInterval !== null) {
-      clearInterval(scanInterval);
-      scanInterval = null;
-    }
+    requestScan();
+    const interval = setInterval(requestScan, SCAN_INTERVAL_MS);
+    return () => clearInterval(interval);
   });
 });
 

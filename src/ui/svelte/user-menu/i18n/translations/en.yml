@@ -1,10 +1,16 @@
 empty_list: No items
+loading: Loading...
+retry: Retry
 folders:
+  collapse: Hide files
   desktop: Desktop
   documents: Documents
   downloads: Downloads
+  expand: Show files
+  load_failed: Could not load this folder
   more_items: Show more...
   music: Music
+  open_in_explorer: Open in Explorer
   pictures: Pictures
   recent: Recently used
   reduce_items: Show less...
@@ -12,6 +18,7 @@ folders:
   videos: Videos
 profile:
   accounts: Open account settings
+  load_failed: Could not load your profile
   log_out: Log out
   open_onedrive: Open OneDrive directory
   open_user_folder: Open user directory

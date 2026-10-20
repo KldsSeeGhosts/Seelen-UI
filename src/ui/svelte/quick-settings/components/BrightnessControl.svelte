@@ -1,16 +1,16 @@
 <script lang="ts">
   import { invoke, SeelenCommand } from "@seelen-ui/lib";
-  import { Icon } from "libs/ui/svelte/components/Icon";
+  import Icon from "libs/ui/svelte/components/Icon/Icon.svelte";
   import { state } from "../state.svelte";
   import { brightnessIcon } from "libs/ui/utils";
-  import { throttle } from "lodash";
   import { t } from "../i18n";
+  import SliderInput from "./SliderInput.svelte";
 
   const hasBrightness = $derived(state.monitors.some((monitor) => monitor.brightness != null));
 
-  const setBrightnessThrottled = throttle((id: string, brightness: number) => {
-    invoke(SeelenCommand.SetMonitorBrightness, { id, brightness });
-  }, 100);
+  function setBrightness(monitorId: string, brightness: number) {
+    return invoke(SeelenCommand.SetMonitorBrightness, { id: monitorId, brightness });
+  }
 </script>
 
 {#if hasBrightness}
@@ -24,15 +24,9 @@
           <span class="quick-settings-item-icon">
             <Icon iconName={brightnessIcon(monitor.brightness)} />
           </span>
-          <input
-            type="range"
-            data-skin="flat"
+          <SliderInput
             value={monitor.brightness}
-            oninput={(e) => {
-              setBrightnessThrottled(monitor.id, Number(e.currentTarget.value));
-            }}
-            min={0}
-            max={100}
+            commit={(brightness) => setBrightness(monitor.id, brightness)}
           />
         </div>
       {/if}

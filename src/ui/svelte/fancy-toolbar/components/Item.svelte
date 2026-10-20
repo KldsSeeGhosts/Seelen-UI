@@ -143,7 +143,13 @@
       onclick={handleClick}
       onwheel={self.onWheelUp || self.onWheelDown ? handleWheel : undefined}
       oncontextmenu={handleContextMenu}
-      onkeypress={() => {}}
+      onkeydown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          handleClick();
+        }
+      }}
       transition:CssHandled|global={{
         enabled() {
           return !!sortable && !sortable.isDragging;

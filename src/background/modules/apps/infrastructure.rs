@@ -1,9 +1,14 @@
-use std::{collections::HashMap, sync::Once};
+use std::{
+    collections::HashMap,
+    sync::{LazyLock, Once},
+    time::Duration,
+};
 
 use seelen_core::{
     handlers::SeelenEvent,
     system_state::{FocusedApp, UserAppWindow, UserAppWindowColors, UserAppWindowPreview},
 };
+use slu_utils::Throttle;
 use windows::Win32::UI::Shell::{IShellDispatch6, Shell};
 
 use crate::{
@@ -13,6 +18,35 @@ use crate::{
     widgets::permissions::{WidgetPerm, request_widget_permission},
     windows_api::{Com, input::Mouse, window::Window},
 };
+
+/// Window captures arrive in bursts (several windows at once, or a window moving); the
+/// events carry the complete preview/color maps, so broadcasting one per capture resends
+/// every cached thumbnail. Bursts are coalesced over this short interval instead.
+const BROADCAST_COALESCE_INTERVAL: Duration = Duration::from_millis(80);
+
+static PREVIEWS_BROADCAST: LazyLock<Throttle<()>> = LazyLock::new(|| {
+    slu_utils::throttle(
+        |_| {
+            emit_to_webviews(
+                SeelenEvent::UserAppWindowsPreviewsChanged,
+                WinPreviewManager::instance().get_previews(),
+            );
+        },
+        BROADCAST_COALESCE_INTERVAL,
+    )
+});
+
+static COLORS_BROADCAST: LazyLock<Throttle<()>> = LazyLock::new(|| {
+    slu_utils::throttle(
+        |_| {
+            emit_to_webviews(
+                SeelenEvent::UserAppWindowsColorsChanged,
+                WinPreviewManager::instance().get_colors(),
+            );
+        },
+        BROADCAST_COALESCE_INTERVAL,
+    )
+});
 
 /// Lazy initialization wrapper that registers Tauri events on first access
 /// This keeps Tauri logic separate from system logic while ensuring lazy initialization
@@ -29,17 +63,12 @@ fn get_apps_manager() -> &'static UserAppsManager {
         WinPreviewManager::subscribe(|event| {
             use crate::modules::apps::application::previews::WinPreviewEvent;
             match event {
-                WinPreviewEvent::Captured(_) | WinPreviewEvent::Cleaned(_) => {
-                    emit_to_webviews(
-                        SeelenEvent::UserAppWindowsPreviewsChanged,
-                        WinPreviewManager::instance().get_previews(),
-                    );
-                }
-                WinPreviewEvent::ColorsUpdated(_) => {
-                    emit_to_webviews(
-                        SeelenEvent::UserAppWindowsColorsChanged,
-                        WinPreviewManager::instance().get_colors(),
-                    );
+                WinPreviewEvent::Captured(_) => PREVIEWS_BROADCAST.call(()),
+                WinPreviewEvent::ColorsUpdated(_) => COLORS_BROADCAST.call(()),
+                // the window also disappears from the colors map
+                WinPreviewEvent::Cleaned(_) => {
+                    PREVIEWS_BROADCAST.call(());
+                    COLORS_BROADCAST.call(());
                 }
             }
         });

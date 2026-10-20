@@ -3,11 +3,15 @@ import { invoke, SeelenCommand, SeelenEvent, subscribe } from "../../handlers/mo
 import { RuntimeStyleSheet } from "../../utils/DOM.ts";
 
 export async function disableAnimationsOnPerformanceMode(): Promise<void> {
-  const initial = await invoke(SeelenCommand.StateGetPerformanceMode);
-  setDisableAnimations(initial);
-  subscribe(SeelenEvent.StatePerformanceModeChanged, (e) => {
+  let changed = false;
+  await subscribe(SeelenEvent.StatePerformanceModeChanged, (e) => {
+    changed = true;
     setDisableAnimations(e.payload);
   });
+  const initial = await invoke(SeelenCommand.StateGetPerformanceMode);
+  if (!changed) {
+    setDisableAnimations(initial);
+  }
 }
 
 function setDisableAnimations(mode: PerformanceMode): void {

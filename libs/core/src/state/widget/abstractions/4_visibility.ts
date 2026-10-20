@@ -15,11 +15,43 @@ const debouncedClose = debounce(async () => {
 
 export class Widget_4 extends Widget_3 {
   protected _destroyOnHide = false;
+  private _visible = false;
+  private readonly visibilityListeners = new Set<(visible: boolean) => void>();
   /**
    * Incremented on every show/hide call, so any in-flight call can detect it was superseded
    * by a newer one after each `await` and bail out.
    */
   private _visibilityToken = 0;
+
+  /** Last confirmed native window visibility, initialized by ready(). */
+  public get isVisible(): boolean {
+    return this._visible;
+  }
+
+  public onVisibilityChanged(callback: (visible: boolean) => void): () => void {
+    this.visibilityListeners.add(callback);
+    return () => {
+      this.visibilityListeners.delete(callback);
+    };
+  }
+
+  protected updateVisibility(visible: boolean): void {
+    if (visible === this._visible) return;
+    this._visible = visible;
+    for (const callback of this.visibilityListeners) {
+      try {
+        callback(visible);
+      } catch (error) {
+        console.error("Widget visibility listener failed:", error);
+      }
+    }
+  }
+
+  protected scheduleCloseWhenHidden(): void {
+    if (this._destroyOnHide && !this.isVisible) {
+      debouncedClose();
+    }
+  }
 
   public async show(): Promise<void> {
     const token = ++this._visibilityToken;
@@ -28,6 +60,7 @@ export class Widget_4 extends Widget_3 {
     // a hide() was called while showing, it already owns the attribute.
     if (token === this._visibilityToken) {
       delete globalThis.document.documentElement.dataset.widgetHidden;
+      this.updateVisibility(true);
     }
   }
 
@@ -41,8 +74,9 @@ export class Widget_4 extends Widget_3 {
     }
     await this.window.hide();
     // a show() may have been called while the window was hiding, don't schedule the close.
-    if (this._destroyOnHide && token === this._visibilityToken) {
-      debouncedClose();
+    if (token === this._visibilityToken) {
+      this.updateVisibility(false);
+      this.scheduleCloseWhenHidden();
     }
   }
 
