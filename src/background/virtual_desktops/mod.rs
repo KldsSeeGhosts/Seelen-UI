@@ -649,7 +649,12 @@ impl VdManager {
             WinEvent::SystemForeground | WinEvent::ObjectFocus => {
                 Self::instance().move_to_top(window_id);
             }
-            WinEvent::SynDebouncedRectChange => {
+            WinEvent::SynDebouncedRectChange | WinEvent::SystemMoveSizeEnd => {
+                // The location debounce is canceled on move/size end. Reconcile explicitly
+                // on release, and keep the source layout stable while the user is dragging.
+                if window.is_dragging() {
+                    return Ok(());
+                }
                 let manager = Self::instance();
                 if manager.is_pinned(&window_id) {
                     return Ok(());

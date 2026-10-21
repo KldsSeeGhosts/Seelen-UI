@@ -135,6 +135,9 @@ impl WindowManagerV2 {
                     state.cancel_reservation();
                 }
 
+                if state.recover_window(&window) {
+                    TwmState::send(TwmStateEvent::Changed);
+                }
                 if !state.is_managed(&window) {
                     return Ok(());
                 }
@@ -155,6 +158,19 @@ impl WindowManagerV2 {
                 Self::synthetic_foreground_location_change(&window)?;
             }
             WinEvent::SystemMoveSizeEnd => {
+                {
+                    let mut state = WM_STATE.lock();
+                    if state.recover_window(&window) {
+                        TwmState::send(TwmStateEvent::Changed);
+                        return Ok(());
+                    }
+                }
+                if window.crossed_monitor_while_dragging() {
+                    // The higher-priority desktop handler has queued WindowMoved, which
+                    // will retile both workspaces. Do not resize from a DPI-induced size
+                    // change or reapply the old tree while that event is still queued.
+                    return Ok(());
+                }
                 Self::system_move_size_end(&window)?;
                 Self::force_retiling()?;
             }
@@ -196,6 +212,8 @@ impl WindowManagerV2 {
                 if state.is_managed(window) {
                     state.remove(window);
                     state.add_to_layout(window, &desktop);
+                    TwmState::send(TwmStateEvent::Changed);
+                } else if state.recover_window(window) {
                     TwmState::send(TwmStateEvent::Changed);
                 }
             }

@@ -1,6 +1,7 @@
 pub mod cli;
 pub mod handler;
 pub mod hook;
+mod resize;
 pub mod state_v2;
 
 use seelen_core::{handlers::SeelenEvent, state::AppExtraFlag};

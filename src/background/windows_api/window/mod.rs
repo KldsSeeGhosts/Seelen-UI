@@ -4,7 +4,6 @@ pub mod event;
 use seelen_core::state::WorkspaceId;
 use seelen_core::{rect::Rect, system_state::MonitorId};
 use slu_ipc::messages::SvcAction;
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::{
     fmt::{Debug, Display},
@@ -39,8 +38,8 @@ use super::{
 
 static DRAGGING_WINDOW: AtomicIsize = AtomicIsize::new(0);
 static LAST_DRAGGED_WINDOW: AtomicIsize = AtomicIsize::new(0);
-static DRAGGED_WINDOW_RECT_BEFORE_DRAG: LazyLock<Arc<TracedMutex<Option<Rect>>>> =
-    LazyLock::new(|| Arc::new(TracedMutex::new(None)));
+static DRAGGED_WINDOW_START: LazyLock<TracedMutex<Option<WindowDragStart>>> =
+    LazyLock::new(|| TracedMutex::new(None));
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Window(HWND);
@@ -429,10 +428,13 @@ impl Window {
         if dragging {
             DRAGGING_WINDOW.store(self.address(), Ordering::SeqCst);
             LAST_DRAGGED_WINDOW.store(self.address(), Ordering::SeqCst);
-            *DRAGGED_WINDOW_RECT_BEFORE_DRAG.lock() = self.inner_rect().ok();
+            *DRAGGED_WINDOW_START.lock() = self.inner_rect().ok().map(|rect| WindowDragStart {
+                rect,
+                monitor: self.monitor(),
+            });
         } else {
             DRAGGING_WINDOW.store(0, Ordering::SeqCst);
-            // *DRAGGING_WINDOW_RECT_BEFORE_DRAG.lock() = None; we don't clean up to allow be used on drag end
+            // Keep the start snapshot for the move/size-end handlers.
         }
     }
 
@@ -440,9 +442,9 @@ impl Window {
     /// otherwise returns the current rect
     pub fn get_rect_before_dragging(&self) -> Result<Rect> {
         if self.is_dragging() || self.is_last_dragged() {
-            let guard = DRAGGED_WINDOW_RECT_BEFORE_DRAG.lock();
-            if let Some(rect) = guard.as_ref() {
-                Ok(rect.clone())
+            let guard = DRAGGED_WINDOW_START.lock();
+            if let Some(start) = guard.as_ref() {
+                Ok(start.rect.clone())
             } else {
                 self.inner_rect()
             }
@@ -450,4 +452,20 @@ impl Window {
             self.inner_rect()
         }
     }
+
+    pub fn crossed_monitor_while_dragging(&self) -> bool {
+        if !self.is_dragging() && !self.is_last_dragged() {
+            return false;
+        }
+        let start_monitor = DRAGGED_WINDOW_START
+            .lock()
+            .as_ref()
+            .map(|start| start.monitor);
+        start_monitor.is_some_and(|monitor| monitor != self.monitor())
+    }
+}
+
+struct WindowDragStart {
+    rect: Rect,
+    monitor: Monitor,
 }

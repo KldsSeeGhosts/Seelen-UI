@@ -177,7 +177,9 @@ impl UserAppsManager {
 
                 true
             }
-            WinEvent::SynDebouncedRectChange => {
+            WinEvent::SynDebouncedRectChange | WinEvent::SystemMoveSizeEnd => {
+                // Move/size end cancels the location debounce. Refresh here as well
+                // so monitor, maximize and fullscreen state cannot remain stale.
                 let window = Window::from(data.hwnd);
                 data.is_zoomed = window.is_maximized();
                 data.is_fullscreen = window.is_fullscreen();
@@ -278,4 +280,43 @@ pub fn is_interactable_window(window: &Window) -> bool {
     }
 
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use seelen_core::{rect::Rect, system_state::ProcessInformation};
+
+    #[test]
+    fn move_size_end_clears_stale_geometry_without_a_debounced_event() {
+        // An invalid handle supplies a deterministic native snapshot: neither
+        // maximized nor fullscreen, with no rectangle. No real window is touched.
+        let mut data = UserAppWindow {
+            hwnd: 0,
+            monitor: Default::default(),
+            title: String::new(),
+            app_name: String::new(),
+            is_zoomed: true,
+            is_iconic: false,
+            is_fullscreen: true,
+            umid: None,
+            process: ProcessInformation { id: 0, path: None },
+            prevent_pinning: false,
+            relaunch: None,
+            rect: Some(Rect::default()),
+            last_foreground_at: 0,
+            attention: WindowAttention::None,
+            badge_icon_path: None,
+            badge_updated_at: 0,
+            badge_value: None,
+        };
+
+        assert!(UserAppsManager::update_window_data(
+            &mut data,
+            WinEvent::SystemMoveSizeEnd
+        ));
+        assert!(!data.is_zoomed);
+        assert!(!data.is_fullscreen);
+        assert!(data.rect.is_none());
+    }
 }
