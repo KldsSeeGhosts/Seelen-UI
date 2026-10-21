@@ -11,6 +11,8 @@ import { debounce } from "lodash";
 import type { AppOrFileWegItem } from "../types.ts";
 import { focused, interactables, selfWinId, widgetStatuses, windowsColors } from "./getters.svelte.ts";
 import { overlayState } from "./overlays.svelte.ts";
+import { dockGeometry } from "./geometry.svelte.ts";
+import { rectanglesIntersect } from "../domain/geometry.ts";
 
 export { focused, interactables, widgetStatuses, windowsColors };
 
@@ -65,13 +67,13 @@ const _isDockOverlapped = $derived.by(() => {
     return false;
   }
 
-  // Check if any interactable window overlaps with the hitbox
-  const a = settingsState.widgetRect.hitboxRect;
+  // Only the rendered dock's footprint counts, not the whole reserved screen edge.
+  const a = dockGeometry.overlapRect;
+  if (!a) return false;
   for (const app of interactables.value) {
     if (app.monitor !== widget.decoded.monitorId || app.isIconic || !app.rect) continue;
-    const b = app.rect;
 
-    if (!(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom)) {
+    if (rectanglesIntersect(a, app.rect)) {
       return true;
     }
   }

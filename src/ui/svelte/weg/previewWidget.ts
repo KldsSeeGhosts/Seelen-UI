@@ -1,6 +1,7 @@
 import { invoke, SeelenCommand } from "@seelen-ui/lib";
 import { Alignment, SeelenWegSide, type UserAppWindow, type WidgetId } from "@seelen-ui/lib/types";
 import { settingsState } from "./state/settings.svelte.ts";
+import { dockGeometry } from "./state/geometry.svelte.ts";
 
 /** Time the pointer has to rest on an item before its preview opens. */
 const HOVER_DELAY_MS = 350;
@@ -108,7 +109,7 @@ export function triggerPreviewWidget(itemEl: HTMLElement, windows: UserAppWindow
         hwnds: windows.map((w) => w.hwnd),
         position: dockSide,
         anchor,
-        dockRect: viewRect,
+        dockRect: dockGeometry.overlapRect,
       },
     },
   }).catch((error) => console.error("Failed to open dock preview:", error));

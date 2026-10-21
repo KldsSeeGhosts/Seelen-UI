@@ -409,3 +409,27 @@ passed. A native probe using hidden disposable windows reproduced promotion into
 a topmost predecessor. Jot's Windows debug build passed with zero warnings/errors, using an isolated output directory.
 The Seelen package was installed locally from `17918ca2` on October 21, 2026; its installed manifest records that exact
 source commit. The user confirmed that transient terminals no longer disturb the tiling layout.
+
+## Follow-up: notifications beside a compact dock
+
+The overlap checks used the full screen-edge strip from the dock's positioning/reservation geometry. A Steam toast or
+other tool window at either end of that strip could therefore immediately hide a centered dock even though it never
+covered the visible dock. The hover preview received the same overly broad rectangle.
+
+Overlap checks now use the rendered taskbar's length, measured by a Svelte attachment and `ResizeObserver`, converted to
+physical screen coordinates. The attachment refreshes after geometry, edge and monitor changes; the observer follows
+item/theme resizing and viewport resizing. The footprint keeps the configured edge-strip depth while the dock translates
+offscreen, preventing auto-hide from clearing its own collision and repeatedly revealing itself. Normal application
+overlap and preview suppression use the same footprint. Fullscreen capture and controls that intersect the dock still
+take priority.
+
+This changes collision detection, not Windows' persistent space reservation. Windows exposes a single
+[work-area rectangle per monitor](https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-monitorinfo),
+so its standard appbar reservation cannot describe a centered exclusion with usable areas on both sides. Keeping the
+reservation stable also avoids moving maximized/tiled windows when a notification appears.
+
+Regression tests run with `node --import tsx --test src/ui/svelte/weg/domain/geometry.test.ts`. They cover notifications
+beside and over the dock, every dock edge, stable hidden geometry, full-width/overflowing themes, item-count changes,
+fractional DPI, negative monitor coordinates, empty measurements and fullscreen capture. Installed verification remains:
+trigger Steam notifications beside the dock on both monitors, then check an intersecting ShareX/Jot overlay and hover
+previews. Installation and restart are handled separately through the local package scripts.

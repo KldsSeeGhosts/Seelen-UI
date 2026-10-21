@@ -11,6 +11,7 @@
   import { systemState } from "../state/system.svelte.ts";
   import { getWindowsForItem, windowsState } from "../state/windows.svelte.ts";
   import { dockShouldBeHidden, setDockIsDraggingItem } from "../state/hidden.svelte.ts";
+  import { observeDockGeometry } from "../state/geometry.svelte.ts";
   import { getSeelenWegMenu } from "../dockMenu.ts";
   import { createDragDropManager } from "libs/ui/dnd.ts";
   import type { SwItem } from "../types.ts";
@@ -87,6 +88,7 @@
 </script>
 
 <div
+  {@attach observeDockGeometry}
   role="toolbar"
   tabindex="0"
   data-has-margin={!!settings?.margin}
