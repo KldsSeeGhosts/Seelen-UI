@@ -3,7 +3,7 @@
   import Icon from "libs/ui/svelte/components/Icon/Icon.svelte";
   import { state } from "../state.svelte";
   import { t } from "../i18n";
-  import SliderInput from "./SliderInput.svelte";
+  import { SliderInput } from "libs/ui/svelte/components/SliderInput";
 
   let defaultOutput = $derived(state.mediaOutputs.find((d) => d.isDefaultMultimedia));
   let defaultInput = $derived(state.mediaInputs.find((d) => d.isDefaultMultimedia));

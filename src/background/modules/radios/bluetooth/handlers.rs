@@ -22,16 +22,27 @@ fn get_bluetooth_manager() -> &'static BluetoothManager {
 }
 
 impl crate::tauri_handlers::Handlers {
-    pub fn get_bluetooth_devices() -> Vec<BluetoothDevice> {
-        get_bluetooth_manager().get_all_devices()
+    pub async fn get_bluetooth_devices() -> Result<Vec<BluetoothDevice>> {
+        // The first call initializes both WinRT device watchers, which block until their
+        // initial enumeration completes. Keep that off the async command workers.
+        crate::get_tokio_handle()
+            .spawn_blocking(|| get_bluetooth_manager().get_all_devices())
+            .await
+            .map_err(|err| format!("Failed to read bluetooth devices: {err}").into())
     }
 
-    pub fn start_bluetooth_scanning() -> Result<()> {
-        get_bluetooth_manager().start_scanning()
+    pub async fn start_bluetooth_scanning() -> Result<()> {
+        crate::get_tokio_handle()
+            .spawn_blocking(|| get_bluetooth_manager().start_scanning())
+            .await
+            .map_err(|err| format!("Failed to start Bluetooth scanning: {err}"))?
     }
 
-    pub fn stop_bluetooth_scanning() -> Result<()> {
-        get_bluetooth_manager().stop_scanning()
+    pub async fn stop_bluetooth_scanning() -> Result<()> {
+        crate::get_tokio_handle()
+            .spawn_blocking(|| get_bluetooth_manager().stop_scanning())
+            .await
+            .map_err(|err| format!("Failed to stop Bluetooth scanning: {err}"))?
     }
 
     pub async fn request_pair_bluetooth_device(id: String) -> Result<DevicePairingNeededAction> {

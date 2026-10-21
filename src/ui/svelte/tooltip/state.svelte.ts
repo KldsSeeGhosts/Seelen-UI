@@ -1,22 +1,77 @@
 import { invoke, SeelenCommand, SeelenEvent, subscribe, Widget } from "@seelen-ui/lib";
 import { ZOrder } from "@seelen-ui/lib/types";
+import { tick } from "svelte";
 
 let tooltipText = $state<string | null>(null);
-const showing = $derived(!!tooltipText);
+/** The native window is only shown once the final text has been measured and positioned. */
+let visible = $state(false);
+/**
+ * Incremented by every trigger and hide. Each awaiting step checks it, so a slow trigger can
+ * never position or show over a newer one (or over an already requested hide).
+ */
+let generation = 0;
+
+const showing = $derived(visible && !!tooltipText);
+
+function hide() {
+  generation += 1;
+  tooltipText = null;
+  visible = false;
+}
 
 Widget.self.onTrigger(async ({ desiredPosition, alignX, alignY, customArgs }) => {
-  const show = Boolean(customArgs?.show);
-  if (!show) {
+  const run = ++generation;
+
+  if (!customArgs?.show) {
     tooltipText = null;
+    visible = false;
     return;
   }
 
-  if (desiredPosition) {
-    await Widget.self.adjustAndSetPosition(desiredPosition.x, desiredPosition.y, alignX, alignY);
-    invoke(SeelenCommand.SetSelfZOrder, { zOrder: ZOrder.Top });
+  const text = String(customArgs?.text ?? "") || null;
+  if (!text) {
+    tooltipText = null;
+    visible = false;
+    return;
   }
 
-  tooltipText = String(customArgs?.text ?? "") || null;
+  // The window is still hidden here. Rendering the final text first makes the autosizer
+  // measure the size the tooltip will be shown with, instead of the previous tooltip's.
+  tooltipText = text;
+  await tick();
+  if (run !== generation) {
+    return;
+  }
+
+  try {
+    if (Widget.self.isReady) {
+      await Widget.self.executeAutoSize();
+      if (run !== generation) {
+        return;
+      }
+    }
+  } catch (error) {
+    console.error("tooltip: failed to resize to its content", error);
+  }
+
+  if (desiredPosition) {
+    try {
+      await Widget.self.adjustAndSetPosition(desiredPosition.x, desiredPosition.y, alignX, alignY);
+    } catch (error) {
+      console.error("tooltip: failed to position itself", error);
+    }
+    if (run !== generation) {
+      return;
+    }
+    invoke(SeelenCommand.SetSelfZOrder, { zOrder: ZOrder.Top }).catch((error) => {
+      console.error("tooltip: failed to raise itself", error);
+    });
+  }
+
+  if (run !== generation) {
+    return;
+  }
+  visible = true;
 });
 
 // The widget that triggered the tooltip (dock/toolbar) can lose the mouse
@@ -37,14 +92,14 @@ $effect.root(() => {
       initialized = true;
       return;
     }
-    tooltipText = null;
+    hide();
   });
 
   $effect(() => {
     if (showing) {
-      Widget.self.show();
+      Widget.self.show().catch((error) => console.error("tooltip: failed to show", error));
     } else {
-      Widget.self.hide();
+      Widget.self.hide().catch((error) => console.error("tooltip: failed to hide", error));
     }
   });
 });

@@ -8,8 +8,10 @@ const indexJsCode = fetch("./index.js").then((res) => res.text());
 
 // initialize global widget variable, needed by slu-lib
 const currentWidgetId = webviewInfo.widgetId;
-const widgetList = await _invoke<Widget[]>("state_get_widgets");
-window.__SLU_WIDGET = widgetList.find((widget) => widget.id === currentWidgetId)!;
+// Only the calling webview's own definition is needed here; fetching the whole widget list
+// would serialize every widget's (large) definition on every webview startup.
+const selfWidget = await _invoke<Widget>("get_self_widget");
+window.__SLU_WIDGET = selfWidget;
 
 if (!window.__SLU_WIDGET) {
   throw new Error(`Widget definition not found for ${currentWidgetId}`);

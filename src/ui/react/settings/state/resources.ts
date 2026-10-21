@@ -17,30 +17,33 @@ function SorterByDisplayName(
 }
 
 const _widgets = lazySignal(() => invoke(SeelenCommand.StateGetWidgets));
-subscribe(SeelenEvent.StateWidgetsChanged, _widgets.setByPayload);
-await _widgets.init();
+const widgetsSubscribed = subscribe(SeelenEvent.StateWidgetsChanged, _widgets.setByPayload);
 
 const _plugins = lazySignal(() => invoke(SeelenCommand.StateGetPlugins));
-subscribe(SeelenEvent.StatePluginsChanged, _plugins.setByPayload);
-await _plugins.init();
+const pluginsSubscribed = subscribe(SeelenEvent.StatePluginsChanged, _plugins.setByPayload);
 
 const _themes = lazySignal(() => invoke(SeelenCommand.StateGetThemes));
-subscribe(SeelenEvent.StateThemesChanged, _themes.setByPayload);
-await _themes.init();
+const themesSubscribed = subscribe(SeelenEvent.StateThemesChanged, _themes.setByPayload);
 
 const _iconPacks = lazySignal(() => invoke(SeelenCommand.StateGetIconPacks));
-subscribe(SeelenEvent.StateIconPacksChanged, _iconPacks.setByPayload);
-await _iconPacks.init();
+const iconPacksSubscribed = subscribe(SeelenEvent.StateIconPacksChanged, _iconPacks.setByPayload);
 
 const _wallpapers = lazySignal(() => invoke(SeelenCommand.StateGetWallpapers));
-subscribe(SeelenEvent.StateWallpapersChanged, _wallpapers.setByPayload);
-await _wallpapers.init();
+const wallpapersSubscribed = subscribe(SeelenEvent.StateWallpapersChanged, _wallpapers.setByPayload);
+
+await Promise.all([
+  widgetsSubscribed.then(() => _widgets.init()),
+  pluginsSubscribed.then(() => _plugins.init()),
+  themesSubscribed.then(() => _themes.init()),
+  iconPacksSubscribed.then(() => _iconPacks.init()),
+  wallpapersSubscribed.then(() => _wallpapers.init()),
+]);
 
 export const widgets = computed(() => _widgets.value.toSorted(SorterByDisplayName));
 export const plugins = computed(() => _plugins.value.toSorted(SorterByDisplayName));
 export const themes = computed(() => _themes.value.toSorted(SorterByDisplayName));
 export const iconPacks = computed(() => _iconPacks.value.toSorted(SorterByDisplayName));
-export const wallpapers = computed(() => _wallpapers.value.sort(SorterByDisplayName));
+export const wallpapers = computed(() => _wallpapers.value.toSorted(SorterByDisplayName));
 
 // check for updates
 export type ResourceWithKind = { id: string; metadata: ResourceMetadata; kind: ResourceKind };

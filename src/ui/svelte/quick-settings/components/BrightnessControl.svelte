@@ -4,7 +4,7 @@
   import { state } from "../state.svelte";
   import { brightnessIcon } from "libs/ui/utils";
   import { t } from "../i18n";
-  import SliderInput from "./SliderInput.svelte";
+  import { SliderInput } from "libs/ui/svelte/components/SliderInput";
 
   const hasBrightness = $derived(state.monitors.some((monitor) => monitor.brightness != null));
 

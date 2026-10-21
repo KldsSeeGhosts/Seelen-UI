@@ -85,6 +85,8 @@ async function fetchUser(): Promise<void> {
 }
 
 let openCategory = $state<FolderType | null>(null);
+/** Incremented on every show, so a retained menu can reset its scroll offset. */
+let showRevision = $state(0);
 widget.window.onFocusChanged(({ payload: focused }) => {
   if (!focused) {
     openCategory = null;
@@ -113,6 +115,10 @@ class State {
       knownFolders.ensureLoaded(value);
     }
   }
+
+  get showRevision(): number {
+    return showRevision;
+  }
 }
 
 export const globalState = new State();
@@ -122,6 +128,7 @@ void initSettings();
 function startLoading(): void {
   // GetUser refreshes the registry-backed profile; retaining the window must not retain
   // a stale picture/name indefinitely after the user changes Windows account settings.
+  showRevision += 1;
   void fetchUser();
 }
 

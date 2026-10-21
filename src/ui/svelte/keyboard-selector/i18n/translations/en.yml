@@ -1,2 +1,6 @@
+change_failed: Could not apply the change
+load_failed: Could not load
+loading: Loading...
 more: More keyboard settings
+retry: Retry
 title: Keyboard layout

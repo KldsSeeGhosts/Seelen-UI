@@ -35,6 +35,8 @@
     if (device) {
       invoke(SeelenCommand.OpenFile, {
         path: `ms-settings:sound-properties?endpointId=${device.id}`,
+      }).catch((error) => {
+        console.error("Failed to open the device settings:", error);
       });
     }
   }

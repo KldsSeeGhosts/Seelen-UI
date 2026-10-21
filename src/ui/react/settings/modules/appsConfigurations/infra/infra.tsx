@@ -4,7 +4,7 @@ import { Button, Input, Modal, Switch, Table, Tooltip } from "antd";
 import type { ColumnsType, ColumnType } from "antd/es/table";
 import type { TFunction } from "i18next";
 import { cloneDeep, debounce } from "lodash";
-import { type ChangeEvent, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { cx } from "../../shared/utils/app.ts";
@@ -135,31 +135,21 @@ function Actions({ record }: { record: AppConfigurationExtended; index: number }
 }
 
 export function AppsConfiguration() {
-  const [delay, setDelay] = useState(300);
-  const [loading, setLoading] = useState(true);
   const [selectedAppsKey, setSelectedAppsKey] = useState<number[]>([]);
   const [searched, setSearched] = useState("");
-  const [data, setData] = useState<AppConfigurationExtended[]>([]);
-
-  useEffect(() => {
+  const data = useMemo(() => {
     const data: AppConfigurationExtended[] = [];
 
     appsConfig.value.forEach((app, index) => data.unshift({ ...app, key: index }));
 
-    setTimeout(() => {
-      setData(
-        data.filter((app) => {
-          return (
-            app.name.toLowerCase().includes(searched) ||
-            app.identifier.id.toLowerCase().includes(searched) ||
-            app.identifier.and.some((id) => id.id.toLowerCase().includes(searched)) ||
-            app.identifier.or.some((id) => id.id.toLowerCase().includes(searched))
-          );
-        }),
+    return data.filter((app) => {
+      return (
+        app.name.toLowerCase().includes(searched) ||
+        app.identifier.id.toLowerCase().includes(searched) ||
+        app.identifier.and.some((id) => id.id.toLowerCase().includes(searched)) ||
+        app.identifier.or.some((id) => id.id.toLowerCase().includes(searched))
       );
-      setLoading(false);
-      setDelay(0);
-    }, delay);
+    });
   }, [appsConfig.value, searched]);
 
   const { t } = useTranslation();
@@ -185,16 +175,17 @@ export function AppsConfiguration() {
   }, [selectedAppsKey]);
 
   const onSearch = useCallback(
-    debounce((e: ChangeEvent<HTMLInputElement>) => {
-      setSearched(e.currentTarget.value.toLowerCase());
+    debounce((value: string) => {
+      setSearched(value.toLowerCase());
     }, 200),
     [],
   );
+  useEffect(() => () => onSearch.cancel(), [onSearch]);
 
   const columns = getColumns(t);
   columns[0]!.title = (
     <Input
-      onChange={onSearch}
+      onChange={(event) => onSearch(event.currentTarget.value)}
       onClick={(e) => e.stopPropagation()}
       placeholder={t("apps_configurations.search")}
     />
@@ -203,7 +194,6 @@ export function AppsConfiguration() {
   return (
     <div className={cs.container}>
       <Table
-        loading={loading}
         dataSource={data}
         columns={columns}
         pagination={{ pageSize: 25 }}

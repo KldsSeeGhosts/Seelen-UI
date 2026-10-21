@@ -32,14 +32,20 @@
 <div class="weg-item-preview-container slu-std-popover">
   <div class="weg-item-preview-list">
     {#each previewState.currentInteractables as win (win.hwnd)}
-      {@const preview = previewState.previews.value[win.hwnd]}
+      {@const preview = previewState.previews[win.hwnd]}
       <div
         role="button"
         tabindex="0"
         class="weg-item-preview"
         onclick={() => onClickPreview(win.hwnd)}
         onauxclick={(e) => onAuxClickPreview(e, win.hwnd)}
-        onkeypress={() => {}}
+        onkeydown={(event) => {
+          if (event.target !== event.currentTarget) return;
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onClickPreview(win.hwnd);
+          }
+        }}
       >
         <div class="weg-item-preview-topbar">
           <div class="weg-item-preview-title">{win.title}</div>

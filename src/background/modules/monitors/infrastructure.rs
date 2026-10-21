@@ -49,21 +49,34 @@ fn get_monitors() -> Vec<PhysicalMonitor> {
 }
 
 impl crate::tauri_handlers::Handlers {
-    pub fn get_connected_monitors() -> Vec<PhysicalMonitor> {
-        get_monitor_manager();
-        get_monitors()
+    pub async fn get_connected_monitors() -> Result<Vec<PhysicalMonitor>> {
+        Ok(crate::get_tokio_handle()
+            .spawn_blocking(|| {
+                get_monitor_manager();
+                get_monitors()
+            })
+            .await?)
     }
 
-    pub fn set_monitor_hdr(id: MonitorId, state: bool) -> Result<()> {
-        let monitor = MonitorEnumerator::enumerate_win32()?
-            .into_iter()
-            .find(|m| matches!(m.get_stable_info(), Ok((mid, _)) if mid == id))
-            .ok_or("Monitor not found")?;
-        monitor.set_hdr_state(state)
+    pub async fn set_monitor_hdr(id: MonitorId, state: bool) -> Result<()> {
+        crate::get_tokio_handle()
+            .spawn_blocking(move || {
+                let monitor = MonitorEnumerator::enumerate_win32()?
+                    .into_iter()
+                    .find(|m| matches!(m.get_stable_info(), Ok((mid, _)) if mid == id))
+                    .ok_or("Monitor not found")?;
+                monitor.set_hdr_state(state)
+            })
+            .await?
     }
 
-    pub fn set_monitor_brightness(id: MonitorId, brightness: u8) -> Result<()> {
-        get_monitor_manager();
-        BrightnessManager::instance().set_brightness(&id, brightness)
+    pub async fn set_monitor_brightness(id: MonitorId, brightness: u8) -> Result<()> {
+        let manager = crate::get_tokio_handle()
+            .spawn_blocking(|| {
+                get_monitor_manager();
+                BrightnessManager::instance()
+            })
+            .await?;
+        manager.set_brightness(id, brightness).await
     }
 }

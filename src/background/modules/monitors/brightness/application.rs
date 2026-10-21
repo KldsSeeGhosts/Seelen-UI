@@ -16,7 +16,7 @@ use crate::{
             WmiSetBrightnessPayload,
         },
     },
-    utils::lock_free::{SyncVec, TracedMutex},
+    utils::lock_free::SyncVec,
     windows_api::{
         MonitorEnumerator,
         monitor::{
@@ -34,18 +34,12 @@ const WBEM_E_NOT_SUPPORTED: i32 = 0x8004100C_u32 as i32;
 /// (~60 ms on a healthy monitor) on a background thread.
 const DDCCI_POLL_INTERVAL: Duration = Duration::from_secs(5);
 
-/// Serializes every DDC/CI transaction (polling and writes) *together with* the publication
-/// of its result into `BrightnessManager::ddcci`. Holding the lock across both steps means a
-/// read that started before a write can never overwrite the written value afterwards.
-/// Concurrent transactions over the same I2C bus can also corrupt each other.
-static DDCCI_LOCK: TracedMutex<()> = TracedMutex::new(());
-
 /// Tracks the brightness of every panel, keyed by the stable id of the monitor showing it.
 /// A monitor usually has a single panel, but a cloned/mirrored group has one per display.
 pub struct BrightnessManager {
     /// Internal displays (laptops), managed through WMI.
     wmi: SyncVec<WmiPanel>,
-    /// External displays, managed through DDC/CI. Written only while holding `DDCCI_LOCK`.
+    /// External displays, managed through DDC/CI. Only the worker writes this snapshot.
     ddcci: SyncVec<DdcciPanel>,
     worker_tx: crossbeam_channel::Sender<WorkerMessage>,
 }
@@ -133,21 +127,29 @@ impl BrightnessManager {
         let _ = self.worker_tx.send(WorkerMessage::Rescan);
     }
 
-    /// Background loop: pairs the panels with the monitors on demand and polls the DDC/CI ones.
+    /// Serializes scans, hardware writes and polls, including publication of their results.
+    /// Slow hardware never blocks the UI thread, and an older poll cannot overwrite a write.
     /// `instance()` must not be called from here until the first message arrives, since the
     /// worker is spawned while the singleton is still being constructed.
     fn worker(rx: crossbeam_channel::Receiver<WorkerMessage>) {
-        // block until init sends the first rescan, i.e. until the singleton exists
-        if rx.recv().is_err() {
-            return;
-        }
-        Self::scan();
         loop {
             match rx.recv_timeout(DDCCI_POLL_INTERVAL) {
-                Ok(WorkerMessage::Rescan) => {
-                    // collapse bursts of display events into a single scan
-                    while rx.try_recv().is_ok() {}
-                    Self::scan();
+                Ok(message) => {
+                    let mut batch = BrightnessBatch::default();
+                    batch.push(message);
+                    // Bound draining so a continuous producer cannot starve hardware writes.
+                    for message in rx.try_iter().take(256) {
+                        batch.push(message);
+                    }
+                    if batch.rescan {
+                        Self::scan();
+                    }
+                    for pending in batch.writes {
+                        let result = Self::instance()
+                            .apply_brightness(&pending.id, pending.percent)
+                            .map_err(|error| error.to_string());
+                        pending.complete(result);
+                    }
                 }
                 Err(crossbeam_channel::RecvTimeoutError::Timeout) => Self::ddcci_poll(),
                 Err(crossbeam_channel::RecvTimeoutError::Disconnected) => return,
@@ -271,7 +273,7 @@ impl BrightnessManager {
 
     /// Reads the brightness of a panel and validates the answer. Panels that don't speak
     /// DDC/CI fail the read; panels that answer nonsense are treated the same way, since
-    /// writing to them could leave the panel in a bad state. Caller must hold `DDCCI_LOCK`.
+    /// writing to them could leave the panel in a bad state. Only called on the worker.
     fn ddcci_read(handle: &PhysicalMonitorHandle) -> Result<DdcciBrightnessValues> {
         let values = handle.ddcci_get_brightness()?;
         if values.max <= values.min || values.current < values.min || values.current > values.max {
@@ -282,7 +284,6 @@ impl BrightnessManager {
 
     /// Returns whether the known DDC/CI panels changed.
     fn ddcci_scan(&self, targets: &[ScanTarget]) -> bool {
-        let _guard = DDCCI_LOCK.lock();
         let mut found = Vec::new();
         for target in targets {
             let ScanTarget { monitor, id, name } = target;
@@ -328,7 +329,6 @@ impl BrightnessManager {
     /// handled by the rescan triggered from `MonitorManager`.
     fn ddcci_poll() {
         let manager = Self::instance();
-        let guard = DDCCI_LOCK.lock();
         let mut changed = false;
         for known in manager.ddcci.to_vec() {
             let Ok(values) = Self::ddcci_read(&known.handle) else {
@@ -343,8 +343,6 @@ impl BrightnessManager {
                 });
             }
         }
-        drop(guard);
-
         if changed {
             manager.emit_changed();
         }
@@ -352,8 +350,7 @@ impl BrightnessManager {
 
     /// Returns whether the monitor has any DDC/CI panel.
     fn ddcci_set(&self, id: &MonitorId, percent: u8) -> Result<bool> {
-        let guard = DDCCI_LOCK.lock();
-        // resolve under the lock: a rescan may have replaced the handles meanwhile
+        // Scans and writes share the worker, so these handles remain valid for the write.
         let panels: Vec<DdcciPanel> = self
             .ddcci
             .to_vec()
@@ -370,8 +367,6 @@ impl BrightnessManager {
                 }
             });
         }
-        drop(guard);
-
         if !panels.is_empty() {
             self.emit_changed();
         }
@@ -394,11 +389,24 @@ impl BrightnessManager {
             })
     }
 
-    /// Sets the brightness of every panel behind the monitor. `percent` goes from 0 to 100
-    /// and is mapped to whatever range each panel works with.
-    pub fn set_brightness(&self, id: &MonitorId, percent: u8) -> Result<()> {
-        let percent = percent.min(100);
+    /// Coalesces queued writes per monitor and acknowledges the actual hardware result.
+    /// Every superseded caller completes when the newest value in its batch is applied.
+    pub async fn set_brightness(&self, id: MonitorId, percent: u8) -> Result<()> {
+        let (reply, result) = tokio::sync::oneshot::channel();
+        self.worker_tx
+            .send(WorkerMessage::Set {
+                id,
+                percent: percent.min(100),
+                reply,
+            })
+            .map_err(|_| "Brightness worker stopped")?;
+        result
+            .await
+            .map_err(|_| "Brightness worker stopped before completing the write")?
+            .map_err(Into::into)
+    }
 
+    fn apply_brightness(&self, id: &MonitorId, percent: u8) -> Result<()> {
         let mut supported = false;
         for panel in self.wmi.to_vec() {
             if &panel.monitor_id == id {
@@ -419,6 +427,51 @@ impl BrightnessManager {
 enum WorkerMessage {
     /// A display was added/removed, re-enumerate monitors.
     Rescan,
+    Set {
+        id: MonitorId,
+        percent: u8,
+        reply: tokio::sync::oneshot::Sender<std::result::Result<(), String>>,
+    },
+}
+
+#[derive(Default)]
+struct BrightnessBatch {
+    rescan: bool,
+    writes: Vec<PendingBrightness>,
+}
+
+impl BrightnessBatch {
+    fn push(&mut self, message: WorkerMessage) {
+        match message {
+            WorkerMessage::Rescan => self.rescan = true,
+            WorkerMessage::Set { id, percent, reply } => {
+                if let Some(pending) = self.writes.iter_mut().find(|pending| pending.id == id) {
+                    pending.percent = percent;
+                    pending.replies.push(reply);
+                } else {
+                    self.writes.push(PendingBrightness {
+                        id,
+                        percent,
+                        replies: vec![reply],
+                    });
+                }
+            }
+        }
+    }
+}
+
+struct PendingBrightness {
+    id: MonitorId,
+    percent: u8,
+    replies: Vec<tokio::sync::oneshot::Sender<std::result::Result<(), String>>>,
+}
+
+impl PendingBrightness {
+    fn complete(self, result: std::result::Result<(), String>) {
+        for reply in self.replies {
+            let _ = reply.send(result.clone());
+        }
+    }
 }
 
 /// A connected monitor to look for panels on.
@@ -484,6 +537,36 @@ fn pnp_id_from_wmi_instance(instance_name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn slider_bursts_keep_each_monitors_final_value_and_acknowledge_all_callers() {
+        let mut batch = BrightnessBatch::default();
+        let mut results = Vec::new();
+        for (id, percent) in [("a", 10), ("b", 30), ("a", 60), ("b", 90), ("a", 80)] {
+            let (reply, result) = tokio::sync::oneshot::channel();
+            batch.push(WorkerMessage::Set {
+                id: MonitorId(id.into()),
+                percent,
+                reply,
+            });
+            results.push(result);
+        }
+        // Hotplug must not discard any queued writes or their completion channels.
+        batch.push(WorkerMessage::Rescan);
+        assert!(batch.rescan);
+        assert_eq!(batch.writes.len(), 2);
+        assert_eq!(batch.writes[0].percent, 80);
+        assert_eq!(batch.writes[1].percent, 90);
+        for pending in batch.writes {
+            pending.complete(Err("hardware unavailable".into()));
+        }
+        for mut result in results {
+            assert_eq!(
+                result.try_recv().unwrap(),
+                Err("hardware unavailable".into())
+            );
+        }
+    }
 
     #[test]
     fn wmi_instance_matches_device_path() {

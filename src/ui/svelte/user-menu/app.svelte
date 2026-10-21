@@ -8,8 +8,18 @@
   import { path } from "@tauri-apps/api";
   import { folderDefinitions } from "./state/knownFolders.svelte";
 
+  let popupElement = $state<HTMLElement | null>(null);
+
   $effect(() => {
     Widget.getCurrent().ready();
+  });
+
+  // The popover is the scroll container. A retained menu keeps the offset of the previous
+  // open, so every open starts at the top again.
+  $effect(() => {
+    if (globalState.showRevision > 0 && popupElement) {
+      popupElement.scrollTop = 0;
+    }
   });
 
   async function openInstallationFolder() {
@@ -25,7 +35,7 @@
   }
 </script>
 
-<div class="slu-std-popover user-popup">
+<div class="slu-std-popover user-popup" bind:this={popupElement}>
   <UserProfile
     user={globalState.user}
     status={globalState.userStatus}

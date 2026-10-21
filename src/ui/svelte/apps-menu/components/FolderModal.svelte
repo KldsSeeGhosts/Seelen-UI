@@ -126,7 +126,7 @@
           const oldIndex = expandedItems.findIndex((item) => item.id === source.id);
           const newIndex = expandedItems.findIndex((item) => item.id === target.id);
 
-          if (oldIndex !== -1 && newIndex !== -1) {
+          if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
             let newItems = arrayMove(expandedItems, oldIndex, newIndex);
             globalState.updateFolder(folder.itemId, {
               itemIds: newItems.map((item) => item.id),
@@ -155,27 +155,15 @@
           const draggedItemId = source.id as string;
           const newItemIds = folder.itemIds.filter((id) => id !== draggedItemId);
 
-          // Update folder with new items or handle folder removal
-          if (newItemIds.length >= 2) {
-            globalState.updateFolder(folder.itemId, { itemIds: newItemIds });
-          }
-          // Folder has only 1 item left, convert to app and remove folder
-          else if (newItemIds.length === 1) {
-            const remainingItemId = newItemIds[0]!;
-            globalState.pinnedItems = globalState.pinnedItems
-              .filter((item) => !(item.type === "folder" && item.itemId === folder.itemId))
-              .concat({ type: "app", itemId: remainingItemId });
-          }
-          // Folder is empty, just remove it
-          else {
-            globalState.pinnedItems = globalState.pinnedItems.filter(
-              (item) => !(item.type === "folder" && item.itemId === folder.itemId),
-            );
-          }
-
-          // Add dragged item as standalone app
+          // Publish the complete change once, preserving the folder's position when it remains.
+          const updated = globalState.pinnedItems.flatMap((item) => {
+            if (item.type !== "folder" || item.itemId !== folder.itemId) return [item];
+            if (newItemIds.length >= 2) return [{ ...item, itemIds: newItemIds }];
+            if (newItemIds.length === 1) return [{ type: "app" as const, itemId: newItemIds[0]! }];
+            return [];
+          });
           globalState.pinnedItems = [
-            ...globalState.pinnedItems,
+            ...updated,
             { type: "app", itemId: draggedItemId },
           ];
           onClose();

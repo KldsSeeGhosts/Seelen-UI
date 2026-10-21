@@ -6,6 +6,7 @@ pub mod media;
 pub mod monitors;
 pub mod network;
 pub mod notifications;
+pub mod overlays;
 pub mod power;
 pub mod radios;
 pub mod start;

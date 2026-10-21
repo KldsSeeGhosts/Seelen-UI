@@ -1,3 +1,4 @@
+change_failed: Could not apply the change
 available: Available Devices
 cancel: Cancel
 confirm: Confirm
@@ -10,6 +11,8 @@ disconnect: Disconnect
 disconnecting: Disconnecting...
 display_pin: Enter this PIN on the device
 lowenergy: Low Energy
+load_failed: Could not load
+loading: Loading...
 more: More Bluetooth Settings
 no_adapter: No Bluetooth adapter found
 not_found: No devices found
@@ -21,6 +24,8 @@ password: Password
 provide_address: Enter address
 provide_password: Enter username and password
 provide_pin: Enter PIN
+retry: Retry
+scan_failed: Could not scan for devices
 scanning: Scanning for devices...
 unpair: Unpair
 unpair_failed: Unpairing failed

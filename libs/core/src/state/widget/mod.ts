@@ -101,16 +101,31 @@ export class Widget extends WidgetBasics {
 
   /** Will apply the recommended settings for a popup widget */
   private applyPopupPreset(): void {
+    let requestedVisible = false;
+    let triggerVersion = 0;
+    this.onVisibilityChanged((visible) => {
+      requestedVisible = visible;
+      if (!visible) triggerVersion++;
+      this.window.setIgnoreCursorEvents(!visible).catch(console.error);
+    });
+    this.window.setIgnoreCursorEvents(true).catch(console.error);
+
     this.onTrigger(async ({ desiredPosition, alignX, alignY, customArgs }) => {
-      if (customArgs?.toggle === true && this.isVisible) {
+      const version = ++triggerVersion;
+      if (customArgs?.toggle === true && requestedVisible) {
+        requestedVisible = false;
         await this.hide();
         return;
       }
+      requestedVisible = true;
       if (desiredPosition) {
         await this.adjustAndSetPosition(desiredPosition.x, desiredPosition.y, alignX, alignY);
       }
+      if (version !== triggerVersion || !requestedVisible) return;
       await this.show();
+      if (version !== triggerVersion || !requestedVisible) return;
       await this.focus();
+      if (version !== triggerVersion || !requestedVisible) return;
       const initialControl = document.querySelector<HTMLElement>(
         "[autofocus], button:not(:disabled), input:not(:disabled), [tabindex='0']",
       );
@@ -311,6 +326,10 @@ export class Widget extends WidgetBasics {
     for (const task of this.preReadyTasks) {
       await task;
     }
+
+    // The app tree is mounted at this point: start reacting to content changes only now, the
+    // explicit sizing above already covered the initial frame (see `Widget_3.autoSizeObserver`).
+    this.startAutoSizeObservation();
 
     globalThis.document.documentElement.dataset.widgetReady = "";
     // A cancelled cold trigger may never show this window. It still needs the same

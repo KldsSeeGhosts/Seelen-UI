@@ -1,5 +1,6 @@
 app_settings: App Settings
 brightness: Brightness
+change_failed: Could not change the setting
 dark_mode: Dark Mode
 default_multimedia_volume: Default Multimedia Volume
 disabled: Disabled

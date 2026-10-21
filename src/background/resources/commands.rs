@@ -9,7 +9,10 @@ use crate::{
     error::{Result, ResultLogExt},
     resources::RESOURCES,
     utils::icon_extractor::queue::IconExtractor,
-    widgets::permissions::{WidgetPerm, request_widget_permission},
+    widgets::{
+        permissions::{WidgetPerm, request_widget_permission},
+        webview::WidgetWebviewLabel,
+    },
 };
 use std::{path::PathBuf, sync::Arc};
 
@@ -24,6 +27,17 @@ async fn delete_path(path: PathBuf) {
 impl crate::tauri_handlers::Handlers {
     pub fn state_get_widgets() -> Vec<Arc<Widget>> {
         RESOURCES.widgets()
+    }
+
+    /// Resolves the widget definition of the calling webview. Widgets used to fetch the whole
+    /// widget list on startup just to pick their own entry; this serializes a single
+    /// definition instead (and fails when the webview is not a widget instance).
+    pub fn get_self_widget(webview: tauri::WebviewWindow) -> Result<Arc<Widget>> {
+        let label = WidgetWebviewLabel::try_from_raw(webview.label())?;
+        RESOURCES
+            .widgets
+            .read_sync(&label.widget_id, |_, widget| widget.clone())
+            .ok_or_else(|| format!("Widget definition not found for {}", label.widget_id).into())
     }
 
     pub fn state_get_system_shortcuts() -> Vec<SystemShortcutDeclaration> {

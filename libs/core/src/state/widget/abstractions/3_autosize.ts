@@ -52,6 +52,16 @@ export class Widget_3 extends Widget_2 {
     fitOnScreen: true,
   };
 
+  /**
+   * Observes the auto-sized element once the widget is ready. Created in `setupAutoSizer`
+   * but not connected there: widgets mount their framework tree after `init()`, so observing
+   * immediately reports the still empty root (0x0) and resizes the window to it before the
+   * real content exists. `ready()` runs the explicit initial sizing instead and only then
+   * starts observing for content changes.
+   */
+  private autoSizeObserver: ResizeObserver | null = null;
+  private autoSizeObserving = false;
+
   constructor() {
     super();
     this.executeAutoSize = this.executeAutoSize.bind(this);
@@ -70,8 +80,16 @@ export class Widget_3 extends Widget_2 {
       });
     });
 
-    const observer = new ResizeObserver(this.executeAutoSize);
-    observer.observe(element, {
+    this.autoSizeObserver = new ResizeObserver(this.executeAutoSize);
+  }
+
+  /** Starts observing the auto-sized element, see `autoSizeObserver`. */
+  protected startAutoSizeObservation(): void {
+    if (!this.autoSizeObserver || this.autoSizeObserving) {
+      return;
+    }
+    this.autoSizeObserving = true;
+    this.autoSizeObserver.observe(this.autoSize.element, {
       box: "border-box",
     });
   }

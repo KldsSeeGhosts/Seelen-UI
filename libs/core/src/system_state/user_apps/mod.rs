@@ -34,6 +34,19 @@ pub struct FocusedApp {
     pub rect: Option<Rect>,
 }
 
+/// A foreign top-level window that is not part of the normal task list but can cover
+/// the desktop, such as capture/recording controls and non-activating transcription
+/// overlays. Seelen's own windows, invisible/cloaked/minimized windows and windows
+/// completely outside the virtual screen are not included.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(all(feature = "gen-binds", not(feature = "salvo")), derive(ts_rs::TS))]
+#[serde(rename_all = "camelCase")]
+pub struct UserAppOverlayWindow {
+    pub hwnd: isize,
+    /// rect of the window without shadow, in screen coordinates
+    pub rect: Rect,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(all(feature = "gen-binds", not(feature = "salvo")), derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]

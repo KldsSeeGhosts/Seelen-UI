@@ -32,7 +32,7 @@ impl Default for MonitorId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(all(feature = "gen-binds", not(feature = "salvo")), derive(ts_rs::TS))]
 #[cfg_attr(all(feature = "gen-binds", not(feature = "salvo")), ts(repr(enum = name)))]
 pub enum AppBarEdge {
@@ -40,4 +40,13 @@ pub enum AppBarEdge {
     Left,
     Bottom,
     Right,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(all(feature = "gen-binds", not(feature = "salvo")), derive(ts_rs::TS))]
+#[serde(rename_all = "camelCase")]
+pub struct AppBarReservation {
+    pub hwnd: isize,
+    pub requested: Rect,
+    pub rect: Rect,
 }

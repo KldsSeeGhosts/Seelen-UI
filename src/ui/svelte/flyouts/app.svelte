@@ -5,7 +5,6 @@
   import { state as gState } from "./state/mod.svelte";
   import { RendererState } from "./state/placement.svelte";
   import { ConfigState } from "./state/config.svelte";
-  import { debounce } from "lodash";
   import Notification from "../notifications/components/Notification.svelte";
   import Workspace from "./app/Workspace.svelte";
   import MediaDevices from "./app/MediaDevices.svelte";
@@ -18,7 +17,7 @@
   });
 
   let lastChanged = $state<string | null>(null);
-  let orientation = $derived(
+  let orientation: "horizontal" | "vertical" = $derived(
     ["left", "right"].includes(ConfigState.config.placement) ? "vertical" : "horizontal",
   );
 
@@ -78,11 +77,41 @@
     shortcutsPaused,
   };
 
-  const hideWithDelay = $derived(
-    debounce(() => {
+  /** One pending hide at a time: re-scheduling replaces the timer instead of leaking it. */
+  let hideTimer: ReturnType<typeof setTimeout> | null = null;
+  let hidePending = false;
+
+  function clearHideTimer() {
+    if (hideTimer !== null) {
+      clearTimeout(hideTimer);
+      hideTimer = null;
+    }
+  }
+
+  function cancelHide() {
+    hidePending = false;
+    clearHideTimer();
+  }
+
+  function scheduleHide() {
+    hidePending = true;
+    clearHideTimer();
+    hideTimer = setTimeout(() => {
+      hideTimer = null;
+      hidePending = false;
       RendererState.showing = false;
-    }, ConfigState.config.timeToShow * 1000),
-  );
+    }, ConfigState.config.timeToShow * 1000);
+  }
+
+  // A pending hide belongs to the current `timeToShow`: restart it with the new delay, and
+  // never leave its timer running after the component unmounts.
+  $effect(() => {
+    void ConfigState.config.timeToShow;
+    if (hidePending) {
+      scheduleHide();
+    }
+    return clearHideTimer;
+  });
 
   $effect(() => {
     let somethingChanged = false;
@@ -147,7 +176,7 @@
 
     if (somethingChanged) {
       RendererState.showing = true;
-      hideWithDelay();
+      scheduleHide();
     }
 
     // Hide immediately when the currently displayed flyout loses its data source.
@@ -155,7 +184,7 @@
       (lastChanged === "mediaPlaying" && !recomendedPlayer) ||
       (lastChanged === "notification" && !notification)
     ) {
-      hideWithDelay.cancel();
+      cancelHide();
       RendererState.showing = false;
       lastChanged = null;
     }

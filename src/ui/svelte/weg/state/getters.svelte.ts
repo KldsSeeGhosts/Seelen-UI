@@ -32,6 +32,19 @@ export const selfWinId = lazyRune(() => invoke(SeelenCommand.GetSelfWindowId));
 export const interactables = lazyRune(() => invoke(SeelenCommand.GetUserAppWindows));
 subscribe(SeelenEvent.UserAppWindowsChanged, interactables.setByPayload);
 
+const userAppOverlays = lazyRune(() => invoke(SeelenCommand.GetUserAppOverlays));
+const userAppOverlaysSubscribed = subscribe(
+  SeelenEvent.UserAppOverlaysChanged,
+  userAppOverlays.setByPayload,
+);
+
+class OverlaySnapshot {
+  get value() {
+    return userAppOverlays.value;
+  }
+}
+export const overlaySnapshot = new OverlaySnapshot();
+
 export const windowsColors = lazyRune<Record<number, UserAppWindowColors>>(
   () => invoke(SeelenCommand.GetUserAppWindowsColors),
 );
@@ -58,6 +71,8 @@ await Promise.all([
   settings.init(),
   selfWinId.init(),
   interactables.init(),
+  // Await the subscription so the initial overlay snapshot cannot miss a publish.
+  userAppOverlaysSubscribed.then(() => userAppOverlays.init()),
   windowsColors.init(),
   focused.init(),
   widgetStatuses.init(),

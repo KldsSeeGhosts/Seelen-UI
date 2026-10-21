@@ -80,8 +80,8 @@ class State {
     return filteredWindows;
   }
 
-  get previews() {
-    return previews.value;
+  get previews(): typeof previews.value {
+    return previews.isInitialized() ? previews.value : {};
   }
 
   get selectedWindow() {
@@ -134,7 +134,7 @@ $effect.root(() => {
   // Poll the hardware Alt key state instead of relying on keyup events,
   // since the widget-focus trick fakes an Alt keydown that never reaches window.onkeyup.
   $effect(() => {
-    if (!showing) {
+    if (!showing || !autoConfirm) {
       return;
     }
 
@@ -144,6 +144,7 @@ $effect.root(() => {
     const poll = async () => {
       while (!cancelled) {
         const isAltDown = await invoke(SeelenCommand.GetKeyState, { key: "Alt" });
+        if (cancelled) return;
         if (wasAltDown && !isAltDown) {
           onAltKeyUp();
         }
@@ -151,7 +152,7 @@ $effect.root(() => {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
     };
-    poll();
+    poll().catch((error) => console.error("Failed to read task-switcher Alt key state:", error));
 
     return () => {
       cancelled = true;

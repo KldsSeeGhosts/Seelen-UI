@@ -468,6 +468,14 @@ impl WindowsApi {
     }
 
     pub fn set_foreground(target_hwnd: HWND) -> Result<()> {
+        // `slu_utils::windows::set_foreground` returns without doing anything when the target is
+        // already the foreground window. Emitting the synthetic event below for that no-op would
+        // make every consumer re-evaluate focus (menus opening/closing, overlays, etc.) on a
+        // call that changed nothing; the real WinEvent is delivered on its own for real changes.
+        if Self::get_foreground_window() == target_hwnd {
+            return Ok(());
+        }
+
         let window = Window::from(target_hwnd);
 
         slu_utils::windows::set_foreground(target_hwnd.0 as isize)?;

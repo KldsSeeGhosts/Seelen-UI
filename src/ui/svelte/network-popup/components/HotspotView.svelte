@@ -14,11 +14,11 @@
 
   const hotspot = $derived(globalState.hotspot);
   const isOn = $derived(hotspot?.state === HotspotState.on);
-  const isBusy = $derived(hotspot?.state === HotspotState.inTransition);
+  const isBusy = $derived(hotspot?.state === HotspotState.inTransition || globalState.hotspotPending);
 
   async function toggleHotspot() {
     if (!hotspot || isBusy) return;
-    await invoke(SeelenCommand.SetNetworkHotspotState, { enabled: !isOn });
+    await globalState.toggleHotspot();
   }
 
   let showPassword = $state(false);
@@ -40,13 +40,15 @@
       current.passphrase ? escapeWifiField(current.passphrase) : ""
     };;`;
 
+    let cancelled = false;
     QRCode.toDataURL(payload, { margin: 1, width: 176 }).then((url) => {
-      qrDataUrl = url;
-    });
+      if (!cancelled) qrDataUrl = url;
+    }).catch(console.error);
+    return () => { cancelled = true; };
   });
 
   function openHotspotSettings() {
-    invoke(SeelenCommand.OpenFile, { path: "ms-settings:network-mobilehotspot" });
+    invoke(SeelenCommand.OpenFile, { path: "ms-settings:network-mobilehotspot" }).catch(console.error);
   }
 </script>
 
@@ -61,9 +63,16 @@
       data-skin="switch"
       checked={isOn}
       disabled={isBusy}
-      onchange={toggleHotspot}
+      aria-busy={isBusy}
+      onchange={(event) => {
+        event.currentTarget.checked = isOn;
+        toggleHotspot();
+      }}
     />
   </div>
+  {#if globalState.actionFailed}
+    <div role="status">{$t("change_failed")}</div>
+  {/if}
 
   {#if hotspot}
     {#if qrDataUrl}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { throttle } from "lodash";
+  import type { Snippet } from "svelte";
 
   interface Props {
     /** Latest value reported by the backend, from 0 to 100. */
@@ -8,9 +9,13 @@
     commit: (value: number) => Promise<unknown>;
     /** Renders the percentage readout next to the input, sharing the slider's local value. */
     showPercentage?: boolean;
+    /** Renders a caller-owned readout instead, sharing the slider's local value. */
+    readout?: Snippet<[number]>;
+    /** Exposed as the standard `data-orientation` state attribute for themes. */
+    orientation?: "horizontal" | "vertical";
   }
 
-  let { value, commit, showPercentage = false }: Props = $props();
+  let { value, commit, showPercentage = false, readout, orientation }: Props = $props();
 
   /** Minimum delay between backend writes while the user is interacting. */
   const WRITE_INTERVAL_MS = 100;
@@ -98,6 +103,7 @@
 
   $effect(() => {
     return () => {
+      sendThrottled.flush();
       sendThrottled.cancel();
       clearSettleTimer();
     };
@@ -109,6 +115,7 @@
 <input
   type="range"
   data-skin="flat"
+  data-orientation={orientation}
   min={0}
   max={100}
   step={1}
@@ -120,6 +127,8 @@
   onblur={() => endInteraction(true)}
 />
 
-{#if showPercentage}
+{#if readout}
+  {@render readout(displayed)}
+{:else if showPercentage}
   <span class="quick-settings-percentage">{displayed}%</span>
 {/if}

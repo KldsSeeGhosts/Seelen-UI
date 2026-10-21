@@ -24,11 +24,6 @@ use crate::{
     windows_api::event_window::IS_INTERACTIVE_SESSION,
 };
 
-pub enum PodSource {
-    Static,
-    Runtime,
-}
-
 const LIVENESS_PROVE_INTERVAL: Duration = Duration::from_secs(5);
 const LIVENESS_PROVE_WAIT_TIMEOUT: Duration = Duration::from_secs(3);
 const LIVENESS_PROVE_MAX_RETRIES: u8 = 5;
@@ -38,6 +33,10 @@ const LIVENESS_RELOAD_GRACE_PERIOD: Duration = Duration::from_secs(10);
 // memory pressure to their renderer and the JS heap balloons unchecked. Simulating it
 // periodically forces WebView2 to actually release freed pages back to the OS.
 const MEMORY_PRESSURE_INTERVAL: Duration = Duration::from_secs(30);
+// Extra, per-widget delay added to the first memory-pressure run. Every pod is created in the
+// same startup pass, so without it they would all reach their first run together (the global
+// pacer in `webview` would then only reschedule the losers to their next full interval).
+const MEMORY_PRESSURE_STARTUP_JITTER: Duration = MEMORY_PRESSURE_INTERVAL;
 
 pub struct WidgetDeployment {
     pub definition: Arc<Widget>,
@@ -228,8 +227,13 @@ impl WidgetPod {
         self.set_status(WidgetStatus::Mounting);
 
         let label = self.label.clone();
+        let window_id = window.0.hwnd().ok().map(|hwnd| hwnd.0 as isize);
         window.0.on_window_event(move |event| {
             if let tauri::WindowEvent::Destroyed = event {
+                // Unlike WinEvent hooks this still runs while the session is locked.
+                if let Some(window_id) = window_id {
+                    crate::windows_api::AppBarHost::remove(window_id);
+                }
                 // Defer window creation off the UI message-loop thread.
                 // Calling start_all_webviews() (→ WidgetWebview::create → builder.build)
                 // synchronously here triggers a re-entrant ZwUserDestroyWindow while the
@@ -268,11 +272,16 @@ impl WidgetPod {
             return;
         };
         let webview = window.handle();
+        let first_delay = memory_pressure_startup_delay(&self.label);
 
         let handle = get_tokio_handle().spawn(async move {
+            // Never pressure the renderer during startup, and never in lockstep with the
+            // other pods: `simulate_memory_pressure` also re-checks visibility and session
+            // state on every run.
+            tokio::time::sleep(first_delay).await;
             loop {
-                tokio::time::sleep(MEMORY_PRESSURE_INTERVAL).await;
                 webview::simulate_memory_pressure(&webview);
+                tokio::time::sleep(MEMORY_PRESSURE_INTERVAL).await;
             }
         });
 
@@ -363,5 +372,51 @@ impl Drop for WidgetPod {
         if let Some(handle) = self.memory_pressure_handle.take() {
             handle.abort();
         }
+    }
+}
+
+pub enum PodSource {
+    Static,
+    Runtime,
+}
+
+/// Delay before this pod's first memory-pressure simulation, spread deterministically over
+/// `[MEMORY_PRESSURE_INTERVAL, 2 * MEMORY_PRESSURE_INTERVAL)` from its label.
+fn memory_pressure_startup_delay(label: &WidgetWebviewLabel) -> Duration {
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    label.raw.hash(&mut hasher);
+    let spread = hasher.finish() % MEMORY_PRESSURE_STARTUP_JITTER.as_millis() as u64;
+    MEMORY_PRESSURE_INTERVAL + Duration::from_millis(spread)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use seelen_core::resource::WidgetId;
+
+    #[test]
+    fn memory_pressure_startup_delay_is_spread_over_one_interval() {
+        let widget_id = WidgetId::from("@seelen/test".to_string());
+        let first = WidgetWebviewLabel::new(&widget_id, None, None);
+        let second = WidgetWebviewLabel::new(&widget_id, Some("monitor-a"), None);
+
+        for label in [&first, &second] {
+            let delay = memory_pressure_startup_delay(label);
+            assert!(delay >= MEMORY_PRESSURE_INTERVAL);
+            assert!(delay < MEMORY_PRESSURE_INTERVAL + MEMORY_PRESSURE_STARTUP_JITTER);
+        }
+
+        // Deterministic per label (a pod restart must not reschedule arbitrarily) and
+        // different for different instances (pods must not all wake up together).
+        assert_eq!(
+            memory_pressure_startup_delay(&first),
+            memory_pressure_startup_delay(&first)
+        );
+        assert_ne!(
+            memory_pressure_startup_delay(&first),
+            memory_pressure_startup_delay(&second)
+        );
     }
 }

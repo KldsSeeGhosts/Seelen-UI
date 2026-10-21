@@ -9,5 +9,8 @@ device:
   settings: More Device Settings
   volume: Device Volume
 input_devices: Input devices
+load_failed: Could not load
+loading: Loading...
 output_devices: Output devices
 players: Media Players
+retry: Retry

@@ -1,3 +1,4 @@
+change_failed: Could not apply the change
 available: Available networks
 connect: Connect
 connected: Connected to
@@ -14,10 +15,14 @@ hotspot:
   settings: More Hotspot Settings
   ssid: Network name
   title: Hotspot
+load_failed: Could not load
+loading: Loading...
 more: More Network Settings
 no_adapter: No Wi-Fi adapter found
 not_found: No Wi-Fi networks found
 password: Password
+retry: Retry
 saved: Saved networks
+scan_failed: Could not scan for networks
 scanning: Scanning for networks
 secured: Encrypted network

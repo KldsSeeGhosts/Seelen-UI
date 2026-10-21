@@ -220,11 +220,16 @@ slu_commands_declaration! {
         install_last_available_update(),
 
     // System
-    SystemGetMonitors = get_connected_monitors() -> Vec<PhysicalMonitor>,
+    SystemGetMonitors =
+        @async()
+        @fallible()
+        get_connected_monitors() -> Vec<PhysicalMonitor>,
     SetMonitorHdr =
+        @async()
         @fallible()
         set_monitor_hdr(id: MonitorId, state: bool),
     SetMonitorBrightness =
+        @async()
         @fallible()
         set_monitor_brightness(id: MonitorId, brightness: u8),
     SystemGetColors =
@@ -261,8 +266,9 @@ slu_commands_declaration! {
         get_ime_state() -> ImeState,
     RegisterAppBar =
         @webview()
+        @async()
         @fallible()
-        register_app_bar(rect: Rect, edge: AppBarEdge),
+        register_app_bar(rect: Rect, edge: AppBarEdge) -> Rect,
     UnregisterAppBar =
         @webview()
         @fallible()
@@ -355,6 +361,10 @@ slu_commands_declaration! {
         @webview()
         @fallible()
         get_self_window_handle() -> isize,
+    GetSelfWidget =
+        @webview()
+        @fallible()
+        get_self_widget() -> std::sync::Arc<Widget>,
     NormalizeSelfDevicePixelRatio =
         @webview()
         @fallible()
@@ -398,6 +408,7 @@ slu_commands_declaration! {
     GetUserFolderContentState =
         get_user_folder_content_state(folder_type: FolderType) -> UserFolderSnapshot,
     GetUserAppWindows = get_user_app_windows() -> Vec<UserAppWindow>,
+    GetUserAppOverlays = get_user_app_overlays() -> Vec<UserAppOverlayWindow>,
     GetUserAppWindowsPreviews = get_user_app_windows_previews() -> std::collections::HashMap<isize, UserAppWindowPreview>,
     GetUserAppWindowsColors = get_user_app_windows_colors() -> std::collections::HashMap<isize, UserAppWindowColors>,
 
@@ -521,9 +532,11 @@ slu_commands_declaration! {
         @fallible()
         get_network_internet_connection() -> bool,
     GetNetworkHotspot =
+        @async()
         @fallible()
         get_network_hotspot() -> Option<Hotspot>,
     SetNetworkHotspotState =
+        @async()
         @fallible()
         set_network_hotspot_state(enabled: bool),
 
@@ -558,8 +571,12 @@ slu_commands_declaration! {
     ),
 
     // Radios
-    GetRadios = get_radios() -> Vec<RadioDevice>,
+    GetRadios =
+        @async()
+        @fallible()
+        get_radios() -> Vec<RadioDevice>,
     SetRadioState =
+        @async()
         @fallible()
         set_radios_state(kind: RadioDeviceKind, enabled: bool),
 
@@ -571,11 +588,16 @@ slu_commands_declaration! {
     GetSystemGpus = get_system_gpus() -> Vec<Gpu>,
 
     // Bluetooth
-    GetBluetoothDevices = get_bluetooth_devices() -> Vec<BluetoothDevice>,
+    GetBluetoothDevices =
+        @async()
+        @fallible()
+        get_bluetooth_devices() -> Vec<BluetoothDevice>,
     StartBluetoothScanning =
+        @async()
         @fallible()
         start_bluetooth_scanning(),
     StopBluetoothScanning =
+        @async()
         @fallible()
         stop_bluetooth_scanning(),
     RequestPairBluetoothDevice =
@@ -646,6 +668,7 @@ slu_commands_declaration! {
 
     // Fonts
     GetFonts =
+        @async()
         @fallible()
         get_fonts() -> Vec<SeelenFont>,
 

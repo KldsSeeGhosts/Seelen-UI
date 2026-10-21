@@ -162,3 +162,25 @@ export function patchWidgetMonitorConfig(
     },
   };
 }
+
+/** Resets only this monitor's override, preserving its enabled state. */
+export function resetWidgetMonitorConfig(monitorId: string, widgetId: WidgetId) {
+  const monitor = settings.value.monitorsV3[monitorId];
+  const config = monitor?.byWidget[widgetId];
+  if (!monitor || !config) return;
+
+  const { [widgetId]: _, ...remaining } = monitor.byWidget;
+  settings.value = {
+    ...settings.value,
+    monitorsV3: {
+      ...settings.value.monitorsV3,
+      [monitorId]: {
+        ...monitor,
+        byWidget: {
+          ...remaining,
+          [widgetId]: { enabled: config.enabled },
+        },
+      },
+    },
+  };
+}

@@ -36,7 +36,7 @@ use crate::{
     utils::{atomic_write_file, constants::SEELEN_COMMON, lock_free::SyncHashMap},
     widgets::{manager::WIDGET_MANAGER, webview::WidgetWebviewLabel},
     windows_api::{
-        AppBarData, WindowsApi,
+        AppBarHost, WindowsApi,
         input::{Keyboard, Mouse},
         window::Window,
     },
@@ -295,7 +295,7 @@ impl crate::tauri_handlers::Handlers {
 
     pub fn set_self_position(webview: tauri::WebviewWindow, rect: Rect) -> Result<()> {
         use windows::Win32::Graphics::Gdi::*;
-        use windows::Win32::UI::WindowsAndMessaging::SWP_ASYNCWINDOWPOS;
+        use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, SWP_ASYNCWINDOWPOS};
 
         let hwnd = HWND(webview.hwnd()?.0);
         let rect = RECT {
@@ -305,17 +305,30 @@ impl crate::tauri_handlers::Handlers {
             bottom: rect.bottom,
         };
 
+        // ONLY the size change needs the forced repaint below: moving a window keeps the
+        // client area (and its child windows) untouched, but resizing can leave stale pixels.
+        // Widgets that follow the pointer or reposition popups do pure moves constantly, so
+        // skipping the synchronous repaint there matters. An unreadable current rect falls
+        // back to repainting, as before.
+        let mut current = RECT::default();
+        let size_changed = unsafe { GetWindowRect(hwnd, &mut current) }.is_err()
+            || (current.right - current.left) != (rect.right - rect.left)
+            || (current.bottom - current.top) != (rect.bottom - rect.top);
+
         // pre set position for resize in case of multiples dpi
         WindowsApi::move_window(hwnd, &rect)?;
         WindowsApi::set_position(hwnd, None, &rect, SWP_ASYNCWINDOWPOS)?;
-        // ensure child windows are redrawn
-        unsafe {
-            let _ = RedrawWindow(
-                Some(hwnd),
-                None,
-                None,
-                RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN | RDW_FRAME | RDW_ERASE,
-            );
+
+        if size_changed {
+            // ensure child windows are redrawn
+            unsafe {
+                let _ = RedrawWindow(
+                    Some(hwnd),
+                    None,
+                    None,
+                    RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN | RDW_FRAME | RDW_ERASE,
+                );
+            }
         }
         Ok(())
     }
@@ -391,11 +404,17 @@ impl crate::tauri_handlers::Handlers {
         Ok(())
     }
 
-    pub fn register_app_bar(
+    pub async fn register_app_bar(
         webview: tauri::WebviewWindow,
         rect: Rect,
         edge: AppBarEdge,
-    ) -> Result<()> {
+    ) -> Result<Rect> {
+        static REGISTER: std::sync::Once = std::sync::Once::new();
+        REGISTER.call_once(|| {
+            AppBarHost::subscribe(|reservation| {
+                emit_to_webviews(SeelenEvent::AppBarPositionChanged, reservation);
+            });
+        });
         let label = WidgetWebviewLabel::try_from_raw(webview.label())?;
         log::info!(target: &label.decoded, "Registering as Shell Bar");
 
@@ -406,11 +425,7 @@ impl crate::tauri_handlers::Handlers {
             right: rect.right,
             bottom: rect.bottom,
         };
-        let mut app_bar = AppBarData::from_handle(hwnd);
-        app_bar.set_rect(rect);
-        app_bar.set_edge(edge);
-        app_bar.register_as_new_bar()?;
-        Ok(())
+        AppBarHost::upsert(hwnd.0 as isize, rect, edge).await
     }
 
     pub fn unregister_app_bar(webview: tauri::WebviewWindow) -> Result<()> {
@@ -418,8 +433,7 @@ impl crate::tauri_handlers::Handlers {
         log::info!(target: &label.decoded, "Unregistering as Shell Bar");
 
         let hwnd = HWND(webview.hwnd()?.0);
-        let mut app_bar = AppBarData::from_handle(hwnd);
-        app_bar.unregister_bar()?;
+        AppBarHost::remove(hwnd.0 as isize);
         Ok(())
     }
 }

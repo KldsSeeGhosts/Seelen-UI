@@ -1,7 +1,7 @@
 <script lang="ts">
   import { globalState } from "./state.svelte";
   import { invoke, SeelenCommand, Widget } from "@seelen-ui/lib";
-  import { RadioDeviceKind, type WlanBssEntry } from "@seelen-ui/lib/types";
+  import { type WlanBssEntry } from "@seelen-ui/lib/types";
   import Icon from "libs/ui/svelte/components/Icon/Icon.svelte";
   import { t } from "./i18n";
   import WlanEntry from "./components/WlanEntry.svelte";
@@ -51,18 +51,14 @@
   });
 
   const wifiRadio = $derived(globalState.wifiRadio);
+  const radiosBusy = $derived(
+    globalState.radiosStatus === "loading" || globalState.wifiRadioPending,
+  );
 
   function openNetworkSettings() {
-    invoke(SeelenCommand.OpenFile, { path: "ms-settings:network" });
-  }
-
-  async function toggleWifiRadio() {
-    if (wifiRadio) {
-      await invoke(SeelenCommand.SetRadioState, {
-        kind: RadioDeviceKind.WiFi,
-        enabled: !wifiRadio.isEnabled,
-      });
-    }
+    invoke(SeelenCommand.OpenFile, { path: "ms-settings:network" }).catch((error) => {
+      console.error("network-popup: failed to open the network settings", error);
+    });
   }
 
   $effect(() => {
@@ -74,12 +70,21 @@
   {#if globalState.view === "hotspot"}
     <HotspotView onBack={() => (globalState.view = "main")} />
   {:else}
-    {#if !wifiRadio}
+    {#if globalState.radiosStatus === "loading"}
+      <div class="network-no-adapter" aria-busy="true">{$t("loading")}</div>
+    {:else if globalState.radiosStatus === "error"}
+      <div class="network-no-adapter">{$t("load_failed")}</div>
+      <div class="network-footer">
+        <button data-skin="default" onclick={() => globalState.retryRadios()}>
+          {$t("retry")}
+        </button>
+      </div>
+    {:else if !wifiRadio}
       <div class="network-no-adapter">
         {$t("no_adapter")}
       </div>
     {:else}
-      <div class="network-radio-control">
+      <div class="network-radio-control" aria-busy={radiosBusy}>
         <div class="network-radio-label">
           <Icon iconName="FaWifi" />
           <span>Wi-Fi</span>
@@ -88,10 +93,20 @@
           type="checkbox"
           data-skin="switch"
           checked={wifiRadio.isEnabled}
-          onchange={toggleWifiRadio}
+          disabled={radiosBusy}
+          onchange={(event) => {
+            event.currentTarget.checked = wifiRadio.isEnabled;
+            globalState.toggleWifiRadio();
+          }}
         />
       </div>
-      {#if globalState.hotspot}
+      {#if globalState.actionFailed}
+        <div role="status">{$t("change_failed")}</div>
+      {/if}
+      {#if globalState.hotspotStatus === "error"}
+        <button data-skin="default" onclick={() => globalState.retryHotspot()}>{$t("retry")}</button>
+      {/if}
+      {#if globalState.hotspotStatus === "ready" && globalState.hotspot}
         <div class="network-section">
           <div class="network-section-title">{$t("hotspot.title")}</div>
           <div class="network-section-entries">
@@ -125,15 +140,26 @@
       <div class="network-section">
         <div class="network-section-title">
           <span>{$t("available")}</span>
-          {#if globalState.isScanning}
+          {#if globalState.scanPhase === "scanning"}
             <div class="network-scanning">
               <Icon iconName="TbRefresh" />
             </div>
           {/if}
         </div>
         <div class="network-section-entries">
+          {#if globalState.scanPhase === "error"}
+            <div class="network-empty">{$t("scan_failed")}</div>
+            <button data-skin="default" onclick={() => globalState.retryScan()}>
+              {$t("retry")}
+            </button>
+          {/if}
+
           {#if unknown.length === 0 && hidden.length === 0}
-            <div class="network-empty">{$t("not_found")}</div>
+            {#if globalState.scanPhase === "scanning"}
+              <div class="network-empty">{$t("scanning")}</div>
+            {:else if globalState.scanPhase !== "error"}
+              <div class="network-empty">{$t("not_found")}</div>
+            {/if}
           {:else}
             {#each unknown as group (group[0].ssid)}
               <WlanEntry {group} />

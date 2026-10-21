@@ -4,7 +4,7 @@
   import Icon from "libs/ui/svelte/components/Icon/Icon.svelte";
   import moment from "moment";
 
-  const today = moment();
+  const today = $derived(globalState.today);
 
   const momentLang = $derived(globalState.momentLang);
 

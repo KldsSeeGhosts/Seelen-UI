@@ -126,6 +126,11 @@
 
   const showExtraInfo = $derived(selected && globalState.isDevtoolsEnabled);
 
+  // The row toggles its own details, so an already selected network collapses again.
+  function toggleSelection() {
+    globalState.selectedSsid = selected ? null : (isHiddenGroup ? "__HIDDEN_SSID__" : entry.ssid!);
+  }
+
   const extraInfo = $derived.by(() => {
     return group.flatMap((e, i) => {
       const prefix = group.length > 1 ? `#${i + 1} ` : "";
@@ -145,16 +150,17 @@
 <div
   class="wlan-entry"
   class:wlan-entry-selected={selected}
-  onclick={() => {
-    if (!selected) {
-      globalState.selectedSsid = isHiddenGroup ? "__HIDDEN_SSID__" : entry.ssid!;
-    }
+  aria-expanded={selected}
+  onclick={(event) => {
+    if ((event.target as HTMLElement).closest("button, input, label, select, textarea, a")) return;
+    toggleSelection();
   }}
   role="button"
   tabindex="0"
   onkeydown={(e) => {
-    if (e.key === "Enter" || e.key === " ") {
-      globalState.selectedSsid = isHiddenGroup ? "__HIDDEN_SSID__" : entry.ssid!;
+    if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      toggleSelection();
     }
   }}
 >
@@ -181,7 +187,10 @@
 
   {#if selected}
     {#if showFields && !loading}
-      <div class="wlan-entry-fields">
+      <!-- controls inside the row must not collapse it -->
+      <div
+        class="wlan-entry-fields"
+      >
         {#if !entry.ssid}
           <input
             type="text"
@@ -208,7 +217,9 @@
     {#if loading}
       <div class="wlan-entry-connecting">{$t("connecting")}</div>
     {:else}
-      <div class="wlan-entry-actions">
+      <div
+        class="wlan-entry-actions"
+      >
         <button data-skin={entry.connected ? "default" : "solid"} onclick={onConnection}>
           {entry.connected ? $t("disconnect") : $t("connect")}
         </button>

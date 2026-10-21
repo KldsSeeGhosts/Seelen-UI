@@ -19,8 +19,8 @@ export const Header = () => {
 
   const SaveOrQuit = async () => {
     if (hasChanges.value) {
-      await saveSettings();
-      if (needRestart.value) {
+      const saved = await saveSettings();
+      if (saved && needRestart.value) {
         await invoke(SeelenCommand.AppRestart);
       }
     } else {

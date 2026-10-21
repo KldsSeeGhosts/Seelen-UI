@@ -22,8 +22,9 @@ export class Widget_4 extends Widget_3 {
    * by a newer one after each `await` and bail out.
    */
   private _visibilityToken = 0;
+  private visibilityOperation: Promise<void> = Promise.resolve();
 
-  /** Last confirmed native window visibility, initialized by ready(). */
+  /** Latest requested visibility, initialized from the native window by ready(). */
   public get isVisible(): boolean {
     return this._visible;
   }
@@ -56,27 +57,50 @@ export class Widget_4 extends Widget_3 {
   public async show(): Promise<void> {
     const token = ++this._visibilityToken;
     debouncedClose.cancel();
-    await this.window.show();
-    // a hide() was called while showing, it already owns the attribute.
-    if (token === this._visibilityToken) {
-      delete globalThis.document.documentElement.dataset.widgetHidden;
-      this.updateVisibility(true);
-    }
+    // Prepare content before exposing the native window. Opening has no theme transition.
+    delete globalThis.document.documentElement.dataset.widgetHidden;
+    const nativeShow = this.setNativeVisibility(true, token);
+    this.updateVisibility(true);
+    await nativeShow;
   }
 
-  public async hide(): Promise<void> {
+  public async hide(options: { animate?: boolean } = {}): Promise<void> {
     const token = ++this._visibilityToken;
     globalThis.document.documentElement.dataset.widgetHidden = "";
+    this.updateVisibility(false);
 
-    await this.waitHideAnimations();
+    if (options.animate !== false) {
+      await this.waitHideAnimations();
+    }
     if (token !== this._visibilityToken) {
       return;
     }
-    await this.window.hide();
+    await this.setNativeVisibility(false, token);
     // a show() may have been called while the window was hiding, don't schedule the close.
     if (token === this._visibilityToken) {
-      this.updateVisibility(false);
       this.scheduleCloseWhenHidden();
+    }
+  }
+
+  private async setNativeVisibility(visible: boolean, token: number): Promise<void> {
+    // A new show must finish after an already dispatched hide, even if its IPC resolves late.
+    const operation = this.visibilityOperation.catch(() => {}).then(async () => {
+      if (token !== this._visibilityToken) return;
+      if (visible) await this.window.show();
+      else await this.window.hide();
+    });
+    this.visibilityOperation = operation;
+    try {
+      await operation;
+    } catch (error) {
+      if (token === this._visibilityToken) {
+        const actual = await this.window.isVisible();
+        if (token === this._visibilityToken) {
+          this.updateVisibility(actual);
+          globalThis.document.documentElement.toggleAttribute("data-widget-hidden", !actual);
+        }
+      }
+      throw error;
     }
   }
 

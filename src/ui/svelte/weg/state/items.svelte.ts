@@ -142,7 +142,6 @@ export function listToGroups(items: WegItem[], includeSeparator = false) {
 }
 
 const saveDockState = debounce(async (state: OptimisticDockState) => {
-  console.trace("Saving dock state");
   await invoke(SeelenCommand.StateWriteWegItems, {
     items: {
       isReorderDisabled: state.isReorderDisabled,

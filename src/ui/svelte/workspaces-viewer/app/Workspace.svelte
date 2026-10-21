@@ -5,6 +5,7 @@
   import { Wallpaper } from "libs/ui/svelte/components/Wallpaper";
   import { state as store } from "../state.svelte";
   import { createDroppable } from "@dnd-kit/svelte";
+  import { untrack } from "svelte";
 
   interface Props {
     row: number;
@@ -20,9 +21,18 @@
   const wallpaper = $derived(store.findWallpaper(workspace.wallpaper));
 
   let workspaceName = $state("");
+  let editingName = $state(false);
+  let draftWorkspaceId: string | null = null;
 
   $effect(() => {
-    workspaceName = workspace.name || "";
+    const id = workspace.id;
+    const name = workspace.name || "";
+    untrack(() => {
+      if (!editingName || draftWorkspaceId !== id) {
+        draftWorkspaceId = id;
+        workspaceName = name;
+      }
+    });
   });
 
   const droppable = createDroppable({
@@ -61,9 +71,14 @@
   }
 
   function handleKeyDown(e: KeyboardEvent) {
+    if (e.isComposing) return;
     if (e.key === "Enter") {
+      e.preventDefault();
+      e.stopPropagation();
       handleNameChange();
     } else if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
       workspaceName = workspace.name || "";
     }
   }
@@ -83,6 +98,7 @@
     switchWorkspace();
   }}
   onkeydown={(e) => {
+    if (e.target !== e.currentTarget) return;
     if (e.key === "Enter" || e.key === " ") {
       switchWorkspace();
     }
@@ -95,7 +111,11 @@
       data-skin="transparent"
       class="workspace-name-input"
       placeholder={`Workspace ${row}.${column}`}
-      onblur={handleNameChange}
+      onfocus={() => (editingName = true)}
+      onblur={() => {
+        editingName = false;
+        handleNameChange();
+      }}
       onkeydown={handleKeyDown}
       onclick={(e) => e.stopPropagation()}
     />

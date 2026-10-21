@@ -21,7 +21,10 @@ fn get_font_manager() -> &'static FontManager {
 }
 
 impl crate::tauri_handlers::Handlers {
-    pub fn get_fonts() -> Result<Vec<SeelenFont>> {
-        get_font_manager().get_fonts()
+    pub async fn get_fonts() -> Result<Vec<SeelenFont>> {
+        crate::get_tokio_handle()
+            .spawn_blocking(|| get_font_manager().get_fonts())
+            .await
+            .map_err(|err| format!("Failed to read fonts: {err}"))?
     }
 }

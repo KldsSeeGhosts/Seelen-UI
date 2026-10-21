@@ -13,6 +13,7 @@
       return;
     }
     const items = Array.from(root.querySelectorAll<HTMLButtonElement>("button.menu-item:not(:disabled)"));
+    if (!items.length) return;
     const current = items.findIndex((item) => item === document.activeElement);
     let next: number;
     switch (event.key) {

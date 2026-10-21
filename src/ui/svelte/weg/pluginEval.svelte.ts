@@ -82,6 +82,7 @@ export function triggerWidget(widgetId: WidgetId, itemId: string): void {
       desiredPosition: { x, y },
       alignX,
       alignY,
+      customArgs: { toggle: true },
     },
   });
 }

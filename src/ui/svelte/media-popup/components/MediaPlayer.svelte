@@ -4,6 +4,7 @@
   import { Icon, FileIcon, iconPackManager } from "libs/ui/svelte/components/Icon";
   import { convertFileSrc } from "@tauri-apps/api/core";
   import MediaProgress from "./MediaProgress.svelte";
+  import { globalState } from "../state.svelte";
 
   interface Props {
     session: MediaPlayer;
@@ -14,8 +15,12 @@
   const MAX_LUMINANCE = 210;
   const MIN_LUMINANCE = 40;
   const BRIGHTNESS_MULTIPLIER = 1.5;
+  /** The average color does not need the full artwork; 32px avoids decoding it into a huge canvas. */
+  const LUMINANCE_SAMPLE_SIZE = 32;
 
   let luminance = $state(0);
+  /** Incremented by every newer calculation, so a slow decode never overwrites a newer one. */
+  let generation = 0;
 
   let thumbnailSrc = $derived.by(() => {
     if (session?.thumbnail) {
@@ -26,52 +31,80 @@
     return resolved || "";
   });
 
-  function calcLuminance(imageUrl: string): Promise<number> {
+  function calcLuminance(imageUrl: string, signal: AbortSignal): Promise<number> {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.crossOrigin = "Anonymous";
-      img.src = imageUrl;
 
       img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-
-        if (!ctx) {
-          reject(new Error("Unable to get canvas context"));
+        if (signal.aborted) {
+          resolve(0);
           return;
         }
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = LUMINANCE_SAMPLE_SIZE;
+          canvas.height = LUMINANCE_SAMPLE_SIZE;
+          const ctx = canvas.getContext("2d");
 
-        canvas.width = img.width;
-        canvas.height = img.height;
-        ctx.drawImage(img, 0, 0, img.width, img.height);
+          if (!ctx) {
+            throw new Error("Unable to get canvas context");
+          }
 
-        const imageData = ctx.getImageData(0, 0, img.width, img.height);
-        const data = imageData.data;
-        let totalLuminance = 0;
+          ctx.drawImage(img, 0, 0, LUMINANCE_SAMPLE_SIZE, LUMINANCE_SAMPLE_SIZE);
 
-        for (let i = 0; i < data.length; i += 4) {
-          const r = data[i] || 0;
-          const g = data[i + 1] || 0;
-          const b = data[i + 2] || 0;
+          const imageData = ctx.getImageData(0, 0, LUMINANCE_SAMPLE_SIZE, LUMINANCE_SAMPLE_SIZE);
+          const data = imageData.data;
+          let totalLuminance = 0;
 
-          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-          totalLuminance += lum;
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i] ?? 0;
+            const g = data[i + 1] ?? 0;
+            const b = data[i + 2] ?? 0;
+
+            const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+            totalLuminance += lum;
+          }
+
+          resolve(totalLuminance / (data.length / 4));
+        } catch (error) {
+          reject(error);
         }
-
-        const avgLuminance = totalLuminance / (data.length / 4);
-        resolve(avgLuminance);
       };
 
-      img.onerror = (err) => {
-        reject(err);
-      };
+      img.onerror = () => reject(new Error("Unable to load the media thumbnail"));
+      img.src = imageUrl;
     });
   }
 
+  // Only the visible popup pays for the calculation, and the latest artwork always wins.
   $effect(() => {
-    calcLuminance(thumbnailSrc)
-      .then((lum) => (luminance = lum))
-      .catch(console.error);
+    const src = thumbnailSrc;
+    const visible = globalState.visible;
+    if (!visible || !src) {
+      return;
+    }
+
+    const run = ++generation;
+    const controller = new AbortController();
+    calcLuminance(src, controller.signal)
+      .then((lum) => {
+        if (run === generation) {
+          luminance = lum;
+        }
+      })
+      .catch((error) => {
+        if (run === generation) {
+          console.error("Failed to calculate the media thumbnail luminance:", error);
+        }
+      });
+
+    return () => {
+      controller.abort();
+      if (run === generation) {
+        generation += 1;
+      }
+    };
   });
 
   const filteredLuminance = $derived(

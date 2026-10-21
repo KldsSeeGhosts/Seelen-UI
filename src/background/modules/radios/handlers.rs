@@ -24,11 +24,19 @@ fn get_radio_manager() -> &'static RadioManager {
 }
 
 impl crate::tauri_handlers::Handlers {
-    pub fn get_radios() -> Vec<RadioDevice> {
-        get_radio_manager().get_radios()
+    pub async fn get_radios() -> Result<Vec<RadioDevice>> {
+        // The first call initializes the WinRT radio watcher, which blocks until the initial
+        // enumeration completes. Keep that off the async command workers (and the UI thread).
+        crate::get_tokio_handle()
+            .spawn_blocking(|| get_radio_manager().get_radios())
+            .await
+            .map_err(|err| format!("Failed to read radios: {err}").into())
     }
 
-    pub fn set_radios_state(kind: RadioDeviceKind, enabled: bool) -> Result<()> {
-        get_radio_manager().set_radios_state(kind, enabled)
+    pub async fn set_radios_state(kind: RadioDeviceKind, enabled: bool) -> Result<()> {
+        crate::get_tokio_handle()
+            .spawn_blocking(move || get_radio_manager().set_radios_state(kind, enabled))
+            .await
+            .map_err(|err| format!("Failed to change radio state: {err}"))?
     }
 }

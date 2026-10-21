@@ -99,13 +99,18 @@
     return null;
   });
 
+  const accentSource = $derived(monitor.isPrimary && gState.settings.useAccentColor ? accentFilename : null);
   $effect(() => {
-    if (!monitor.isPrimary || !accentFilename || !gState.settings.useAccentColor) return;
-    extractAccentColorFromSrc(convertFileSrc(accentFilename)).then((color) => {
-      if (color) {
-        invoke(SeelenCommand.SystemSetAccentColor, { color });
+    if (!accentSource) return;
+    let cancelled = false;
+    extractAccentColorFromSrc(convertFileSrc(accentSource)).then(async (color) => {
+      if (color && !cancelled) {
+        await invoke(SeelenCommand.SystemSetAccentColor, { color });
       }
-    });
+    }).catch(console.error);
+    return () => {
+      cancelled = true;
+    };
   });
 
   const relativeRect = $derived(monitors.calculateDesktopRelativeRect(monitor.rect));

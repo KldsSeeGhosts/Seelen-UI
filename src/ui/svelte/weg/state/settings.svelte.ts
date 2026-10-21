@@ -1,23 +1,40 @@
-import { invoke, RuntimeStyleSheet, SeelenCommand, Widget } from "@seelen-ui/lib";
-import { Alignment, FancyToolbarSide, HideMode, SeelenWegSide } from "@seelen-ui/lib/types";
+import { RuntimeStyleSheet, Widget } from "@seelen-ui/lib";
+import {
+  Alignment,
+  type AppBarEdge,
+  FancyToolbarSide,
+  HideMode,
+  type SeelenWegSettings,
+  SeelenWegSide,
+  type WidgetId,
+} from "@seelen-ui/lib/types";
 import { isTouchPrimary } from "libs/ui/svelte/utils";
 import { locale } from "../i18n/index.ts";
 import { declareDocumentAsLayeredHitbox } from "libs/ui/react/utils/layered.ts";
 import { systemState } from "./system.svelte.ts";
-import { settings as _settings } from "./getters.svelte.ts";
+import { currentMonitorId, settings as _settings } from "./getters.svelte.ts";
 import { dateState } from "libs/ui/svelte/runes/date.svelte.ts";
 import { rootEffectAsync } from "libs/ui/svelte/utils/RootEffect.svelte.ts";
+import { appBarState as appBar } from "libs/ui/svelte/utils/AppBar.svelte.ts";
 
 let isWidgetReady = $state(false);
-const settings = $derived(_settings.value.byWidget["@seelen/weg"]);
+const settings = $derived({
+  ..._settings.value.byWidget["@seelen/weg"],
+  ..._settings.value.monitorsV3[currentMonitorId]?.byWidget["@seelen/weg" as WidgetId],
+} as SeelenWegSettings);
 
 const workArea = $derived.by(() => {
   const workArea = systemState.currentMonitor.rect;
-  const tbConfig = _settings.value.byWidget["@seelen/fancy-toolbar"];
-  const tbMonitorConfig = (_settings.value.monitorsV3[systemState.currentMonitor.id] as any)
-    ?.byWidget?.["@seelen/fancy-toolbar"] || { enabled: true };
+  const tbRootConfig = _settings.value.byWidget["@seelen/fancy-toolbar"];
+  const tbConfig = {
+    ...tbRootConfig,
+    ..._settings.value.monitorsV3[currentMonitorId]?.byWidget["@seelen/fancy-toolbar" as WidgetId],
+  };
 
-  if (!tbConfig?.enabled || !tbMonitorConfig?.enabled) {
+  if (
+    !tbRootConfig.enabled || !tbConfig.enabled ||
+    (tbConfig.hideMode !== HideMode.Never && !isTouchPrimary.value)
+  ) {
     return workArea;
   }
 
@@ -36,7 +53,7 @@ const workArea = $derived.by(() => {
   return workArea;
 });
 
-const widgetRect = $derived.by(() => {
+const desiredWidgetRect = $derived.by(() => {
   const wa = workArea;
   const hitboxRect = { ...workArea };
   const webviewRect = { ...workArea };
@@ -65,6 +82,31 @@ const widgetRect = $derived.by(() => {
       break;
   }
 
+  return { hitboxRect, webviewRect };
+});
+
+const widgetRect = $derived.by(() => {
+  const desired = desiredWidgetRect;
+  const approved = appBar.rect;
+  if (!approved || (settings.hideMode !== HideMode.Never && !isTouchPrimary.value)) return desired;
+
+  const hitboxRect = { ...approved };
+  const webviewRect = { ...approved };
+  // Keep the dock's larger rendering surface for lifted icons and magnification.
+  switch (settings.position) {
+    case SeelenWegSide.Left:
+      webviewRect.right += desired.webviewRect.right - desired.hitboxRect.right;
+      break;
+    case SeelenWegSide.Right:
+      webviewRect.left -= desired.hitboxRect.left - desired.webviewRect.left;
+      break;
+    case SeelenWegSide.Top:
+      webviewRect.bottom += desired.webviewRect.bottom - desired.hitboxRect.bottom;
+      break;
+    case SeelenWegSide.Bottom:
+      webviewRect.top -= desired.hitboxRect.top - desired.webviewRect.top;
+      break;
+  }
   return { hitboxRect, webviewRect };
 });
 
@@ -174,30 +216,22 @@ export function isHorizontalDock(): boolean {
 }
 
 async function updateWidgetPosition() {
-  const { hitboxRect, webviewRect } = widgetRect;
+  const { hitboxRect } = desiredWidgetRect;
   const isTouch = isTouchPrimary.value;
   const hideMode = settings.hideMode;
   const position = settings.position;
   const isReady = settingsState.isReady;
 
-  await Widget.self.setPosition(webviewRect);
-
   if (!isReady) {
     return;
   }
 
-  if (hideMode === HideMode.Never || isTouch) {
-    await invoke(SeelenCommand.RegisterAppBar, {
-      rect: hitboxRect,
-      edge: position as any,
-    });
-  } else {
-    await invoke(SeelenCommand.UnregisterAppBar);
-  }
+  await appBar.sync(hitboxRect, position as unknown as AppBarEdge, hideMode === HideMode.Never || isTouch);
 }
 
 Widget.self.attachPosition();
 Widget.self.preReadyTasks.push(rootEffectAsync(updateWidgetPosition));
+Widget.self.preReadyTasks.push(rootEffectAsync(() => Widget.self.setPosition(widgetRect.webviewRect)));
 
 $effect.root(() => {
   $effect(() => {
@@ -214,16 +248,19 @@ $effect.root(() => {
     if (isTouchPrimary.value) return;
 
     let unlisten: (() => void) | null = null;
+    let disposed = false;
     declareDocumentAsLayeredHitbox({
       getPhysicalRect: () => {
         const r = widgetRect.webviewRect;
         return { x: r.left, y: r.top, width: r.right - r.left, height: r.bottom - r.top };
       },
     }).then((unlistenFn) => {
-      unlisten = unlistenFn;
-    });
+      if (disposed) unlistenFn();
+      else unlisten = unlistenFn;
+    }).catch(console.error);
 
     return () => {
+      disposed = true;
       unlisten?.();
     };
   });

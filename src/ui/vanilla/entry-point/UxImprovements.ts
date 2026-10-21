@@ -45,6 +45,7 @@ function updateTooltipText(target: HTMLElement) {
   const tooltip = getTooltipText(target);
   if (tooltip) {
     showTooltip(
+      target,
       tooltip,
       alignment(target.dataset.tooltipAlignX),
       alignment(target.dataset.tooltipAlignY),
@@ -89,6 +90,7 @@ function clearTooltipParentElement() {
 }
 
 function showTooltip(
+  target: HTMLElement,
   text: string,
   alignX: Alignment,
   alignY: Alignment,
@@ -101,6 +103,13 @@ function showTooltip(
   }
 
   const run = () => {
+    timeoutRef = null;
+    // The pointer moved on, or the element was rebuilt, while the intent delay was pending:
+    // never trigger a tooltip for content the user is no longer over.
+    if (!target.isConnected || lastShownOn !== target) {
+      return;
+    }
+
     tooltipVisible = true;
     const payload: WidgetTriggerPayload = {
       id: "@seelen/tooltip" as WidgetId,
@@ -160,6 +169,7 @@ document.addEventListener(
 
     setTooltipParentElement(target);
     showTooltip(
+      target,
       tooltip,
       alignment(target.dataset.tooltipAlignX),
       alignment(target.dataset.tooltipAlignY),

@@ -1,8 +1,7 @@
 import { invoke, RuntimeStyleSheet, SeelenCommand, SeelenEvent, Settings, subscribe, Widget } from "@seelen-ui/lib";
 import { declareDocumentAsLayeredHitbox } from "libs/ui/react/utils/layered";
-import type { FocusedApp, TwmReservation, TwmRuntimeTree, WindowManagerSettings } from "@seelen-ui/lib/types";
-import { FancyToolbarSide, HideMode } from "@seelen-ui/lib/types";
-import { SeelenWegSide } from "node_modules/@seelen-ui/lib/esm/gen/types/SeelenWegSide";
+import type { FocusedApp, TwmReservation, TwmRuntimeTree, WidgetId, WindowManagerSettings } from "@seelen-ui/lib/types";
+import { FancyToolbarSide, HideMode, SeelenWegSide } from "@seelen-ui/lib/types";
 
 import { lazyRune } from "libs/ui/svelte/utils/LazyRune.svelte.ts";
 import { isTouchPrimary } from "libs/ui/svelte/utils/signals.svelte.ts";
@@ -88,16 +87,16 @@ const widgetRect = $derived.by(() => {
   }
 
   const rect = { ...monitor.rect };
-  const tbConfig = fullSettings.byWidget["@seelen/fancy-toolbar"];
-  const tbMonitorConfig = (fullSettings.monitorsV3[monitor.id] as any)?.byWidget?.[
-    "@seelen/fancy-toolbar"
-  ] ?? {
-    enabled: true,
+  const monitorConfig = fullSettings.monitorsV3[monitor.id]?.byWidget;
+  const tbRootConfig = fullSettings.byWidget["@seelen/fancy-toolbar"];
+  const tbConfig = {
+    ...tbRootConfig,
+    ...monitorConfig?.["@seelen/fancy-toolbar" as WidgetId],
   };
 
   if (
+    tbRootConfig.enabled &&
     tbConfig.enabled &&
-    tbMonitorConfig.enabled &&
     (tbConfig.hideMode === HideMode.Never || isTouchPrimary.value)
   ) {
     const tbSize = Math.round(
@@ -113,16 +112,15 @@ const widgetRect = $derived.by(() => {
     }
   }
 
-  const wegConfig = fullSettings.byWidget["@seelen/weg"];
-  const wegMonitorConfig = (fullSettings.monitorsV3[monitor.id] as any)?.byWidget?.[
-    "@seelen/weg"
-  ] ?? {
-    enabled: true,
+  const wegRootConfig = fullSettings.byWidget["@seelen/weg"];
+  const wegConfig = {
+    ...wegRootConfig,
+    ...monitorConfig?.["@seelen/weg" as WidgetId],
   };
 
   if (
+    wegRootConfig.enabled &&
     wegConfig.enabled &&
-    wegMonitorConfig.enabled &&
     (wegConfig.hideMode === HideMode.Never || isTouchPrimary.value)
   ) {
     const wegSize = Math.round(

@@ -14,12 +14,15 @@
   interface Props {
     notification: AppNotification;
     onClose?: () => void;
+    /** Snapshot time for the relative timestamp; retained popups refresh it while visible. */
+    now?: number;
   }
 
-  let { notification, onClose }: Props = $props();
+  let { notification, onClose, now }: Props = $props();
 
   let inputData = $state<Record<string, string>>({});
 
+  const relativeDate = $derived(formatRelativeDate(notification.date, now));
   const toastContent = $derived(splitToastContent(notification));
   const logoImage = $derived(toastContent.logoImage);
   const heroImage = $derived(toastContent.heroImage);
@@ -56,6 +59,10 @@
 
   function handleNotificationClick() {
     handleAction(notification.content["@launch"] ?? "", notification.content["@activationType"]);
+  }
+
+  function formatRelativeDate(date: number, now?: number): string {
+    return now === undefined ? moment(date).fromNow() : moment(date).from(now);
   }
 
   function splitToastContent(notification: AppNotification) {
@@ -96,6 +103,8 @@
   onclick={handleNotificationClick}
   onkeydown={(e) => {
     if (e.key === "Enter" || e.key === " ") {
+      // Space would otherwise scroll the notification list while activating the card.
+      e.preventDefault();
       handleNotificationClick();
     }
   }}
@@ -106,7 +115,7 @@
       <div>{notification.appName}</div>
       <span>-</span>
       <div>
-        {moment(notification.date).fromNow()}
+        {relativeDate}
       </div>
     </div>
     <button data-skin="transparent" onclick={handleClose}>

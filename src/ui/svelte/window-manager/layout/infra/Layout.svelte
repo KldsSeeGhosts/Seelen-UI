@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { setContext } from "svelte";
-  import { requestPositioningOfLeaves } from "../application.ts";
+  import { onDestroy, setContext } from "svelte";
+  import { cancelPendingPositioning, requestPositioningOfLeaves } from "../application.ts";
   import { state as wmState } from "../../state.svelte.ts";
   import Container from "./Container.svelte";
   import { TREE_CONTEXT_KEY } from "../domain.ts";
@@ -16,10 +16,13 @@
   // even when this monitor's workspace tree didn't actually change (the backend
   // replaces the whole render tree, not just the affected workspace).
   let lastValidLayout: TwmRuntimeTree | null = null;
+  let lastLayoutJson = "null";
 
   const layout = $derived.by(() => {
     const next = wmState.getLayout(monitorId);
-    if (JSON.stringify(next) !== JSON.stringify(lastValidLayout)) {
+    const nextJson = JSON.stringify(next);
+    if (nextJson !== lastLayoutJson) {
+      lastLayoutJson = nextJson;
       lastValidLayout = next;
     }
     return lastValidLayout;
@@ -39,8 +42,11 @@
     wmState.forceRepositioning; // subscription
     if (layout) {
       requestPositioningOfLeaves(wmState);
+    } else {
+      cancelPendingPositioning();
     }
   });
+  onDestroy(cancelPendingPositioning);
 
   // Update body opacity based on overlay visibility
   $effect(() => {

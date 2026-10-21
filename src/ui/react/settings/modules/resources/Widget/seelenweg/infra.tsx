@@ -1,18 +1,26 @@
-import { HideMode, SeelenWegMode, SeelenWegSide, WegAttentionReveal, WegMiddleClickAction } from "@seelen-ui/lib/types";
+import {
+  HideMode,
+  SeelenWegMode,
+  type SeelenWegSettings as WegSettings,
+  SeelenWegSide,
+  WegAttentionReveal,
+  WegMiddleClickAction,
+} from "@seelen-ui/lib/types";
 import { Icon } from "libs/ui/react/components/Icon/index.tsx";
 import { $is_touch_primary } from "libs/ui/react/utils/signals";
 import { Button, InputNumber, message, Select, Switch, Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
 
 import { OptionsFromEnum } from "../../../shared/utils/app.ts";
-import { getWegConfig, importFromWindowsTaskbar, patchWegConfig } from "./application.ts";
+import { getWegConfig, importFromWindowsTaskbar, patchWegConfig as patchScopedWegConfig } from "./application.ts";
 import { getDevTools } from "../../../developer/application.ts";
 
 import { SettingsGroup, SettingsOption, SettingsSubGroup } from "../../../../components/SettingsBox/index.tsx";
 import Compact from "antd/es/space/Compact";
 
-export const SeelenWegSettings = () => {
-  const settings = getWegConfig();
+export const SeelenWegSettings = ({ monitorId }: { monitorId?: string }) => {
+  const settings = getWegConfig(monitorId);
+  const patchWegConfig = (patch: Partial<WegSettings>) => patchScopedWegConfig(patch, monitorId);
   const isTouchPrimary = $is_touch_primary.value;
   const devTools = getDevTools();
 

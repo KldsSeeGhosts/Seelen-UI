@@ -6,9 +6,15 @@ import { cloneDeep } from "lodash";
 import i18n from "../i18n";
 import { hasPermissionsChanges, restorePermissionsToLastSaved, savePermissions } from "./permissions";
 
-export const DEFAULT_SETTINGS = await invoke(SeelenCommand.StateGetDefaultSettings);
+const [defaultSettings, currentSettings, bundledAppConfigs, defaultMonitorConfig] = await Promise.all([
+  invoke(SeelenCommand.StateGetDefaultSettings),
+  invoke(SeelenCommand.StateGetSettings, { path: null }),
+  invoke(SeelenCommand.StateGetSettingsByApp),
+  invoke(SeelenCommand.StateGetDefaultMonitorSettings),
+]);
 
-export const settings = signal(await invoke(SeelenCommand.StateGetSettings, { path: null }));
+export const DEFAULT_SETTINGS = defaultSettings;
+export const settings = signal(currentSettings);
 const initialSettings = signal(JSON.stringify(settings.value));
 subscribe(SeelenEvent.StateSettingsChanged, ({ payload }) => {
   settings.value = payload;
@@ -21,10 +27,9 @@ const hasSettingsChanges = computed(() => initialSettings.value !== JSON.stringi
 export const hasChanges = computed(() => hasSettingsChanges.value || hasPermissionsChanges.value);
 export const needRestart = signal(false);
 
-const bundledAppConfigs = await invoke(SeelenCommand.StateGetSettingsByApp);
 export const appsConfig = computed(() => [...bundledAppConfigs, ...settings.value.byApp]);
 
-export async function saveSettings() {
+export async function saveSettings(): Promise<boolean> {
   try {
     if (hasPermissionsChanges.value) {
       await savePermissions();
@@ -35,10 +40,11 @@ export async function saveSettings() {
       content: String(error),
       centered: true,
     });
+    return false;
   }
 
   if (!hasSettingsChanges.value) {
-    return;
+    return true;
   }
 
   const s = settings.value;
@@ -59,31 +65,37 @@ export async function saveSettings() {
   };
 
   try {
-    initialSettings.value = JSON.stringify(cleaned);
     settings.value = cleaned;
     await invoke(SeelenCommand.StateWriteSettings, {
       settings: cleaned,
     });
+    initialSettings.value = JSON.stringify(cleaned);
   } catch (error) {
     Modal.error({
       title: "Error on Save",
       content: String(error),
       centered: true,
     });
+    return false;
   }
+  return true;
 }
 
-const defaultMonitorConfig = await invoke(SeelenCommand.StateGetDefaultMonitorSettings);
 effect(() => {
-  const sanitized = settings.peek();
-  for (const monitor of monitors.value) {
-    if (!sanitized.monitorsV3[monitor.id]) {
-      sanitized.monitorsV3[monitor.id] = cloneDeep(defaultMonitorConfig);
-    }
+  const current = settings.peek();
+  const missing = monitors.value.filter((monitor) => !current.monitorsV3[monitor.id]);
+  if (missing.length === 0) return;
+
+  const sanitized = { ...current, monitorsV3: { ...current.monitorsV3 } };
+  // Add automatic defaults to both snapshots without marking pending edits as saved.
+  const saved = JSON.parse(initialSettings.peek()) as typeof current;
+  for (const monitor of missing) {
+    sanitized.monitorsV3[monitor.id] = cloneDeep(defaultMonitorConfig);
+    saved.monitorsV3[monitor.id] ??= cloneDeep(defaultMonitorConfig);
   }
   batch(() => {
     settings.value = sanitized;
-    initialSettings.value = JSON.stringify(sanitized);
+    initialSettings.value = JSON.stringify(saved);
   });
 });
 

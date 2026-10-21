@@ -32,14 +32,10 @@ await subscribe(SeelenEvent.UserFolderChanged, ({ payload: { ofFolder, content }
   }
 });
 
-await Promise.all([
-  desktop.init(),
-  downloads.init(),
-  documents.init(),
-  music.init(),
-  pictures.init(),
-  videos.init(),
-]);
+const folders = [desktop, downloads, documents, music, pictures, videos];
+for (const folder of folders) {
+  folder.init().catch((error) => console.error("Failed to load app-menu folder:", error));
+}
 
 function pathAsItem(path: string): StartMenuItem {
   return {
@@ -52,50 +48,12 @@ function pathAsItem(path: string): StartMenuItem {
 }
 
 const _foldersAsStartMenuItems = $derived.by(() => {
-  return [
-    desktop.value.map(pathAsItem),
-    downloads.value.map(pathAsItem),
-    documents.value.map(pathAsItem),
-    music.value.map(pathAsItem),
-    pictures.value.map(pathAsItem),
-    videos.value.map(pathAsItem),
-  ].flat();
+  return folders.flatMap((folder) => folder.isInitialized() ? folder.value.map(pathAsItem) : []);
 });
 
-export const foldersAsStartMenuItems = {
+class KnownFolderItems {
   get value() {
     return _foldersAsStartMenuItems;
-  },
-};
-
-// =======================================================
-// ======================For Debug========================
-// =======================================================
-
-const extensionCounts: Record<string, number> = {};
-let index = 0;
-function process(deadline: IdleDeadline) {
-  while (index < _foldersAsStartMenuItems.length && deadline.timeRemaining() > 0) {
-    const item = _foldersAsStartMenuItems[index++];
-    const extension = item?.path.split(".").pop();
-    if (extension) {
-      extensionCounts[extension] ??= 0;
-      extensionCounts[extension]++;
-    }
   }
-
-  if (index < _foldersAsStartMenuItems.length) {
-    requestIdleCallback(process);
-    return;
-  }
-
-  invoke(SeelenCommand.WriteFile, {
-    filename: "index.log",
-    content: JSON.stringify({
-      totalFiles: _foldersAsStartMenuItems.length,
-      extensionCounts,
-    }),
-  });
 }
-
-requestIdleCallback(process);
+export const foldersAsStartMenuItems = new KnownFolderItems();

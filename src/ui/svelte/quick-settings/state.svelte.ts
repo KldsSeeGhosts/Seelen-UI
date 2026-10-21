@@ -1,6 +1,7 @@
 import { invoke, SeelenCommand, SeelenEvent, Settings, subscribe, type UnSubscriber, Widget } from "@seelen-ui/lib";
 import type { Hotspot, MediaDevice, PhysicalMonitor, RadioDevice } from "@seelen-ui/lib/types";
 import { locale } from "./i18n/index.ts";
+import { AsyncActions } from "libs/ui/svelte/utils/AsyncActions.svelte.ts";
 
 export type SectionStatus = "loading" | "ready" | "error";
 
@@ -179,6 +180,9 @@ const nightLight = new Section(
 
 const sections = [mediaDevices, radios, hotspot, monitors, darkMode, nightLight];
 
+/** In-flight radio-grid actions; a control stays disabled until its own action settles. */
+const actions = new AsyncActions();
+
 class State {
   get mediaInputs(): MediaDevice[] {
     return mediaDevices.data?.inputs ?? NO_MEDIA_DEVICES;
@@ -230,6 +234,46 @@ class State {
       darkMode.status === "error" || nightLight.status === "error";
   }
 
+  isActionPending(key: string): boolean {
+    return actions.isPending(key);
+  }
+
+  hasActionFailed(key?: string): boolean {
+    return actions.hasFailed(key);
+  }
+
+  /**
+   * Runs a control action once and disables it meanwhile. On failure the affected data is read
+   * again, so the control ends up showing what the backend really has.
+   */
+  runAction(
+    key: string,
+    action: () => Promise<unknown>,
+    recover?: () => Promise<unknown> | unknown,
+  ): Promise<boolean> {
+    return actions.run(key, action, recover);
+  }
+
+  refreshRadios(): Promise<void> {
+    return radios.load(true);
+  }
+
+  refreshHotspot(): Promise<void> {
+    return hotspot.load(true);
+  }
+
+  refreshMonitors(): Promise<void> {
+    return monitors.load(true);
+  }
+
+  refreshDarkMode(): Promise<void> {
+    return darkMode.load(true);
+  }
+
+  refreshNightLight(): Promise<void> {
+    return nightLight.load(true);
+  }
+
   retryRadioControls(): void {
     for (const section of [radios, hotspot, darkMode, nightLight]) {
       if (section.status === "error") {
@@ -264,8 +308,7 @@ function startLoading(): void {
   }
 }
 
-// Device enumeration can block the backend even when its caller does not await it.
-// Start it only after the native window has shown the already mounted shell.
+// Optional device enumeration starts with the first show request, after mounting the shell.
 const widget = Widget.self;
 widget.onVisibilityChanged((visible) => {
   if (visible) startLoading();

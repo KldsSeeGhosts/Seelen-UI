@@ -4,6 +4,7 @@
   import { t } from "./i18n";
   import { editorState, resetState } from "./state.svelte";
   import CanvasRenderer from "./CanvasRenderer.svelte";
+  import { onDestroy } from "svelte";
 
   const CANVAS_SIZE = 512;
 
@@ -16,13 +17,60 @@
     Widget.self.ready();
   });
 
-  function loadImageFromUrl(url: string) {
+  let imageRequest = 0;
+  let imageController: AbortController | null = null;
+  let pendingImage: { image: HTMLImageElement; url: string } | null = null;
+
+  function cancelImageLoad() {
+    imageRequest++;
+    imageController?.abort();
+    imageController = null;
+    if (pendingImage) {
+      pendingImage.image.onload = null;
+      pendingImage.image.onerror = null;
+      pendingImage.image.src = "";
+      URL.revokeObjectURL(pendingImage.url);
+      pendingImage = null;
+    }
+  }
+
+  function loadImageBlob(blob: Blob, request: number) {
+    if (request !== imageRequest) return;
+    const url = URL.createObjectURL(blob);
     const img = new Image();
+    pendingImage = { image: img, url };
+    const release = () => {
+      img.onload = null;
+      img.onerror = null;
+      URL.revokeObjectURL(url);
+      if (pendingImage?.image === img) pendingImage = null;
+    };
     img.onload = () => {
-      resetState();
-      editorState.overlayImage = img;
+      release();
+      if (request === imageRequest) editorState.overlayImage = img;
+    };
+    img.onerror = () => {
+      release();
+      if (request === imageRequest) console.error("Failed to decode icon image");
     };
     img.src = url;
+  }
+  onDestroy(cancelImageLoad);
+
+  async function loadOriginalImage(path: string) {
+    cancelImageLoad();
+    const request = imageRequest;
+    const controller = new AbortController();
+    imageController = controller;
+    try {
+      const response = await fetch(convertFileSrc(path), { signal: controller.signal });
+      if (!response.ok) throw new Error(`Failed to load icon image: ${response.status}`);
+      loadImageBlob(await response.blob(), request);
+    } catch (error) {
+      if (!controller.signal.aborted && request === imageRequest) console.error(error);
+    } finally {
+      if (imageController === controller) imageController = null;
+    }
   }
 
   function clearDraw() {
@@ -36,62 +84,61 @@
   });
 
   function handleReset() {
+    cancelImageLoad();
     resetState();
     clearDraw();
     const entry = editorState.entry;
     if (!entry?.icon) return;
     const path = entry.icon.base ?? entry.icon.light ?? entry.icon.dark;
     if (!path) return;
-    fetch(convertFileSrc(path))
-      .then((r) => r.blob())
-      .then((blob) => {
-        const img = new Image();
-        img.onload = () => {
-          editorState.overlayImage = img;
-        };
-        img.src = URL.createObjectURL(blob);
-      });
+    loadOriginalImage(path);
   }
 
   $effect(() => {
     const entry = editorState.entry;
+    cancelImageLoad();
     if (!entry) return;
     const icon = entry.icon;
     if (!icon) return;
     const path = icon.base ?? icon.light ?? icon.dark;
     if (!path) return;
     // Fetch as blob to avoid tainting the canvas with the asset:// cross-origin URL
-    fetch(convertFileSrc(path))
-      .then((r) => r.blob())
-      .then((blob) => loadImageFromUrl(URL.createObjectURL(blob)));
+    loadOriginalImage(path);
+    return cancelImageLoad;
   });
 
   function onFileChange(e: Event) {
     const file = (e.target as HTMLInputElement).files?.[0];
     if (!file) return;
-    loadImageFromUrl(URL.createObjectURL(file));
+    cancelImageLoad();
+    resetState();
+    loadImageBlob(file, imageRequest);
   }
 
   function onDrop(e: DragEvent) {
     e.preventDefault();
     const file = e.dataTransfer?.files?.[0];
     if (!file || !file.type.startsWith("image/")) return;
-    loadImageFromUrl(URL.createObjectURL(file));
+    cancelImageLoad();
+    resetState();
+    loadImageBlob(file, imageRequest);
   }
 
   async function deleteCustomIcon() {
-    if (!editorState.entry || editorState.saving) return;
+    const entry = editorState.entry;
+    if (!entry || editorState.saving) return;
     editorState.saving = true;
     try {
-      await invoke(SeelenCommand.DeleteUserCustomAppIcon, { entry: editorState.entry });
-      Widget.getCurrent().hide();
+      await invoke(SeelenCommand.DeleteUserCustomAppIcon, { entry });
+      if (editorState.entry === entry) Widget.getCurrent().hide();
     } finally {
-      editorState.saving = false;
+      if (editorState.entry === entry) editorState.saving = false;
     }
   }
 
   async function save() {
-    if (!bgCanvas || !imageCanvas || !drawCanvas || !editorState.entry || editorState.saving)
+    const entry = editorState.entry;
+    if (!bgCanvas || !imageCanvas || !drawCanvas || !entry || editorState.saving)
       return;
     editorState.saving = true;
     try {
@@ -108,12 +155,12 @@
 
       await invoke(SeelenCommand.RegisterUserCustomAppIcon, {
         iconBase64,
-        entry: editorState.entry,
+        entry,
       });
 
-      Widget.getCurrent().hide();
+      if (editorState.entry === entry) Widget.getCurrent().hide();
     } finally {
-      editorState.saving = false;
+      if (editorState.entry === entry) editorState.saving = false;
     }
   }
 </script>

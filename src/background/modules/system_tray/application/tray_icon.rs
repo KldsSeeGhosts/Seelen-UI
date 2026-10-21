@@ -557,7 +557,10 @@ fn save_icon_image(icon_handle: isize, registry_key: &str) -> Option<SavedIconIm
     let path = SEELEN_COMMON
         .app_temp_dir()
         .join(format!("{registry_key}.png"));
-    img.save(&path).unwrap();
+    if let Err(error) = img.save(&path) {
+        log::warn!("Failed to save tray icon image: {error}");
+        return None;
+    }
     Some(SavedIconImage {
         hash: image_to_hash(&img),
         path,

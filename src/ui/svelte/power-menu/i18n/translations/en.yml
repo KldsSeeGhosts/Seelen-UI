@@ -1,9 +1,12 @@
 goodbye: Goodbye {{0}}
 hibernate: Hibernate
+load_failed: Could not load
+loading: Loading...
 lock: Lock session
 log_out: Log out
 pending_updates: There's pending system updates. Install now?
 reboot: Reboot
+retry: Retry
 shutdown: Power off
 suspend: Suspend
 update_and_reboot: Update and restart

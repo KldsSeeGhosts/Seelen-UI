@@ -67,12 +67,17 @@
 }
 
 // default hide/show widget animations.
+// The transition is declared on the hidden state only: transitions use the after-change
+// style, so hiding (`[data-widget-hidden]` added) fades out, while showing (attribute
+// removed) has no transition and is immediate. The native window is already being made
+// visible when the attribute is removed, so a fade-in would only delay every open.
 :root {
   opacity: 1;
-  transition: opacity 150ms ease-out;
 
   &[data-widget-hidden] {
     opacity: 0;
+    pointer-events: none;
+    transition: opacity 150ms ease-out;
   }
 }
 

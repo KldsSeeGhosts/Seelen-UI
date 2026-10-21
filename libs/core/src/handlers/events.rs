@@ -70,6 +70,8 @@ slu_events_declaration! {
     GlobalMouseMove([i32; 2]) as "global-mouse-move",
 
     SystemMonitorsChanged(Vec<PhysicalMonitor>) as "system::monitors-changed",
+    @queued()
+    AppBarPositionChanged(AppBarReservation) as "widget::appbar-position-changed",
     SystemLanguagesChanged(Vec<SystemLanguage>) as "system::languages-changed",
     SystemImeStateChanged(ImeState) as "system::ime-state-changed",
 
@@ -77,6 +79,7 @@ slu_events_declaration! {
     @queued()
     UserFolderChanged(FolderChangedArgs) as "user::known-folder-changed",
     UserAppWindowsChanged(Vec<UserAppWindow>) as "user::windows-changed",
+    UserAppOverlaysChanged(Vec<UserAppOverlayWindow>) as "user::overlays-changed",
     UserAppWindowsPreviewsChanged(HashMap<isize, UserAppWindowPreview>) as "user::windows-previews-changed",
     UserAppWindowsColorsChanged(HashMap<isize, UserAppWindowColors>) as "user::windows-colors-changed",
 

@@ -3,6 +3,7 @@ import { virtualDesktops } from "./getters.svelte.ts";
 import { settingsState } from "./settings.svelte.ts";
 import { systemState } from "./system.svelte.ts";
 import { windowsState } from "./windows.svelte.ts";
+import { overlayState } from "./overlays.svelte.ts";
 import { isThisWebviewFocused, isTouchPrimary } from "libs/ui/svelte/utils";
 
 const isSwitchingWorkspace = $derived(virtualDesktops.value.switching);
@@ -52,6 +53,9 @@ $effect.root(() => {
 
     const { delayToHide, delayToShow, hideMode, position } = settingsState;
     const isMouseOverEdge = systemState.mouseAtEdge === position;
+    // Overlays (capture/recording controls, transcription windows) take priority over
+    // edge reveal and attention reveal, and over the "never hide" preference.
+    const isObscuredByOverlay = overlayState.overlapsDock || overlayState.coversScreen;
 
     let hidden = false;
     let flush = false;
@@ -79,14 +83,23 @@ $effect.root(() => {
       flush = true;
     }
 
-    if (hidden && isRevealedByAttention) {
+    if (hidden && isRevealedByAttention && !isObscuredByOverlay) {
       hidden = false;
     }
 
+    if (isObscuredByOverlay) {
+      hidden = true;
+      flush = true;
+    }
+
     if (hidden) {
-      timeout = setTimeout(() => {
+      if (flush) {
         _hiddenByAutohide = true;
-      }, delayToHide);
+      } else {
+        timeout = setTimeout(() => {
+          _hiddenByAutohide = true;
+        }, delayToHide);
+      }
     } else {
       if (flush) {
         _hiddenByAutohide = false;

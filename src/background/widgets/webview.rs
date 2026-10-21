@@ -1,4 +1,6 @@
 use std::path::PathBuf;
+use std::sync::{LazyLock, atomic::Ordering};
+use std::time::{Duration, Instant};
 
 use base64::Engine;
 use seelen_core::{
@@ -14,9 +16,22 @@ use crate::{
     app::get_app_handle,
     error::{Result, ResultLogExt},
     state::application::FULL_STATE,
-    utils::constants::SEELEN_COMMON,
-    windows_api::WindowsApi,
+    utils::{constants::SEELEN_COMMON, lock_free::TracedMutex},
+    widgets::manager::GAME_MODE_ACTIVE,
+    windows_api::{WindowsApi, event_window::IS_INTERACTIVE_SESSION},
 };
+
+/// Minimum spacing between two memory-pressure simulations across all widget renderers.
+///
+/// Every widget simulates pressure on its own timer, but the CDP call is a renderer-wide
+/// operation that stalls that renderer while V8/Blink collect and hand pages back to the OS.
+/// Pods are created in the same startup pass, so without pacing they would all hit their
+/// renderer within the same few milliseconds; this serializes the calls and spreads them.
+const MEMORY_PRESSURE_MIN_SPACING: Duration = Duration::from_secs(5);
+const MEMORY_PRESSURE_LEASE_TIMEOUT: Duration = Duration::from_secs(30);
+
+static MEMORY_PRESSURE_PACER: LazyLock<TracedMutex<MemoryPressurePacer>> =
+    LazyLock::new(|| TracedMutex::new(MemoryPressurePacer::new(MEMORY_PRESSURE_MIN_SPACING)));
 
 pub struct WidgetWebview(pub tauri::WebviewWindow);
 
@@ -131,84 +146,6 @@ impl WidgetWebview {
     }
 }
 
-/// Makes the webview render 1 CSS px = 1 physical px (`devicePixelRatio` = 1) on every monitor.
-///
-/// By default WebView2 tracks the monitor DPI itself (`ShouldDetectMonitorScaleChanges`) and
-/// updates its `RasterizationScale` asynchronously after the window crosses monitors, so any
-/// zoom-based compensation done from the webview races against it (and against `WM_DPICHANGED`
-/// not being delivered to hidden windows). Taking ownership of the scale and pinning it to 1.0
-/// removes the race entirely: the scale never changes again, whatever monitor the window is on.
-pub fn lock_rasterization_scale_to_one(webview: &tauri::WebviewWindow) -> Result<()> {
-    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Controller3;
-    use windows_core::Interface;
-
-    webview.with_webview(|platform_webview| {
-        let controller = platform_webview.controller();
-        let result = (|| unsafe {
-            // reset any zoom compensation applied before (zoom persists across reloads)
-            controller.SetZoomFactor(1.0)?;
-            let controller = controller.cast::<ICoreWebView2Controller3>()?;
-            controller.SetShouldDetectMonitorScaleChanges(false)?;
-            controller.SetRasterizationScale(1.0)
-        })();
-
-        if let Err(err) = result {
-            log::error!("Failed to lock webview rasterization scale: {err:?}");
-        }
-    })?;
-    Ok(())
-}
-
-/// Forces the WebView2 renderer to react as if the OS was under memory pressure,
-/// via the same CDP call DevTools issues internally. Unlike `window.gc()`, this
-/// actually makes V8/Blink release freed pages back to the OS, because real pressure
-/// almost never reaches an individual background widget when the system overall has
-/// plenty of RAM free.
-pub fn simulate_memory_pressure(webview: &tauri::WebviewWindow) {
-    if webview.is_focused().unwrap_or(false) {
-        return;
-    }
-
-    webview
-        .with_webview(|platform_webview| {
-            let controller = platform_webview.controller();
-            let core_webview = match unsafe { controller.CoreWebView2() } {
-                Ok(core_webview) => core_webview,
-                Err(err) => {
-                    log::warn!("Failed to get ICoreWebView2 for memory pressure simulation: {err}");
-                    return;
-                }
-            };
-
-            // Can't use our own `WindowsString` here: webview2-com pins its own `windows`
-            // crate version (0.61) which is semver-incompatible with the one this project
-            // depends on directly (0.62.2), so their `PCWSTR` types don't unify. Must go
-            // through webview2-com's own string helper, built against its own `windows`.
-            let result =
-                webview2_com::CallDevToolsProtocolMethodCompletedHandler::wait_for_async_operation(
-                    Box::new(move |handler| unsafe {
-                        let method = webview2_com::CoTaskMemPWSTR::from(
-                            "Memory.simulatePressureNotification",
-                        );
-                        let params = webview2_com::CoTaskMemPWSTR::from(r#"{"level":"critical"}"#);
-                        core_webview
-                            .CallDevToolsProtocolMethod(
-                                *method.as_ref().as_pcwstr(),
-                                *params.as_ref().as_pcwstr(),
-                                &handler,
-                            )
-                            .map_err(webview2_com::Error::WindowsError)
-                    }),
-                    Box::new(|error_code, _result| error_code),
-                );
-
-            if let Err(err) = result {
-                log::warn!("Memory.simulatePressureNotification failed: {err:?}");
-            }
-        })
-        .log_error();
-}
-
 impl Drop for WidgetWebview {
     fn drop(&mut self) {
         // Only destroy if Tauri's manager still holds the window. When
@@ -217,6 +154,9 @@ impl Drop for WidgetWebview {
         // would cause re-entrant ZwUserDestroyWindow → FATAL_USER_CALLBACK_EXCEPTION.
         let label = self.0.label().to_owned();
         if get_app_handle().get_webview_window(&label).is_some() {
+            if let Ok(hwnd) = self.0.hwnd() {
+                crate::windows_api::AppBarHost::remove(hwnd.0 as isize);
+            }
             let _ = self.0.destroy();
         }
     }
@@ -367,7 +307,10 @@ impl WebviewArgs {
 
     const UNSTABLE_OPTIMIZATIONS: &[&str] = &[
         // this reduces ram usage but if a widget crashes it will crash
-        // all widgets with the same loader, so it's not worth it
+        // all widgets with the same loader, so it's not worth it.
+        // All Seelen pages share one origin (site), so this puts every widget in a single
+        // renderer: the memory-pressure workaround can no longer target an idle widget only
+        // and is skipped while this is enabled (see `simulate_memory_pressure`).
         "--process-per-site",
     ];
 
@@ -406,5 +349,272 @@ impl WebviewArgs {
 impl std::fmt::Display for WebviewArgs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.args.join(" "))
+    }
+}
+
+/// Paces the global memory-pressure simulation, see [`MEMORY_PRESSURE_MIN_SPACING`].
+struct MemoryPressurePacer {
+    spacing: Duration,
+    last_run: Option<Instant>,
+    in_flight: bool,
+    lease_id: u64,
+}
+
+impl MemoryPressurePacer {
+    const fn new(spacing: Duration) -> Self {
+        Self {
+            spacing,
+            last_run: None,
+            in_flight: false,
+            lease_id: 0,
+        }
+    }
+
+    /// Claims the global slot at `now`, or reports that the previous run is too recent.
+    fn try_claim(&mut self, now: Instant) -> bool {
+        if self.in_flight {
+            if self.last_run.is_some_and(|last_run| {
+                now.saturating_duration_since(last_run) < MEMORY_PRESSURE_LEASE_TIMEOUT
+            }) {
+                return false;
+            }
+            log::warn!("Reclaiming expired WebView memory-pressure lease");
+        }
+        if let Some(last_run) = self.last_run
+            && now.saturating_duration_since(last_run) < self.spacing
+        {
+            return false;
+        }
+        self.last_run = Some(now);
+        self.in_flight = true;
+        self.lease_id = self.lease_id.wrapping_add(1);
+        true
+    }
+
+    fn release(&mut self, lease_id: u64) {
+        if self.lease_id == lease_id {
+            self.in_flight = false;
+        }
+    }
+}
+
+struct MemoryPressureLease(u64);
+
+impl Drop for MemoryPressureLease {
+    fn drop(&mut self) {
+        MEMORY_PRESSURE_PACER.lock().release(self.0);
+    }
+}
+
+/// Makes the webview render 1 CSS px = 1 physical px (`devicePixelRatio` = 1) on every monitor.
+///
+/// By default WebView2 tracks the monitor DPI itself (`ShouldDetectMonitorScaleChanges`) and
+/// updates its `RasterizationScale` asynchronously after the window crosses monitors, so any
+/// zoom-based compensation done from the webview races against it (and against `WM_DPICHANGED`
+/// not being delivered to hidden windows). Taking ownership of the scale and pinning it to 1.0
+/// removes the race entirely: the scale never changes again, whatever monitor the window is on.
+pub fn lock_rasterization_scale_to_one(webview: &tauri::WebviewWindow) -> Result<()> {
+    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Controller3;
+    use windows_core::Interface;
+
+    webview.with_webview(|platform_webview| {
+        let controller = platform_webview.controller();
+        let result = (|| unsafe {
+            // reset any zoom compensation applied before (zoom persists across reloads)
+            controller.SetZoomFactor(1.0)?;
+            let controller = controller.cast::<ICoreWebView2Controller3>()?;
+            controller.SetShouldDetectMonitorScaleChanges(false)?;
+            controller.SetRasterizationScale(1.0)
+        })();
+
+        if let Err(err) = result {
+            log::error!("Failed to lock webview rasterization scale: {err:?}");
+        }
+    })?;
+    Ok(())
+}
+
+/// Decides whether the artificial memory pressure can help this widget right now.
+///
+/// Kept as a pure function so the policy is testable without a webview: a locked/unattended
+/// session has nothing to reclaim for, a suspended widget (game mode) has no renderer to
+/// reclaim from, and a widget the user can see (or interact with) must not be stalled by a
+/// forced critical-pressure GC. With `unstable_optimizations` (`--process-per-site`) every
+/// Seelen page shares one renderer (same origin), so pressure can no longer be scoped to an
+/// idle page and would stall the visible ones too; the shared renderer already shares one heap
+/// between widgets, which is why the experiment can skip this workaround entirely.
+fn can_simulate_memory_pressure(
+    interactive_session: bool,
+    game_mode_active: bool,
+    unstable_optimizations: bool,
+    visible: bool,
+    focused: bool,
+) -> bool {
+    interactive_session && !game_mode_active && !unstable_optimizations && !visible && !focused
+}
+
+/// Forces the WebView2 renderer to react as if the OS was under memory pressure,
+/// via the same CDP call DevTools issues internally. Unlike `window.gc()`, this
+/// actually makes V8/Blink release freed pages back to the OS, because real pressure
+/// almost never reaches an individual background widget when the system overall has
+/// plenty of RAM free.
+///
+/// `Memory.simulatePressureNotification` is per renderer, not per page: in the default
+/// browser configuration each widget owns its renderer, so this only reclaims that widget's
+/// heap. Calls are paced globally ([`MEMORY_PRESSURE_PACER`]) and only run for widgets that
+/// are hidden, unfocused and in an interactive session (see
+/// [`can_simulate_memory_pressure`]).
+pub fn simulate_memory_pressure(webview: &tauri::WebviewWindow) {
+    let unstable_optimizations = FULL_STATE.load().settings.unstable_optimizations;
+    let should_run = can_simulate_memory_pressure(
+        IS_INTERACTIVE_SESSION.load(Ordering::Acquire),
+        GAME_MODE_ACTIVE.load(Ordering::Acquire),
+        unstable_optimizations,
+        webview.is_visible().unwrap_or(true),
+        webview.is_focused().unwrap_or(false),
+    );
+    if !should_run {
+        return;
+    }
+
+    let current = webview.clone();
+    webview
+        .with_webview(move |platform_webview| {
+            // Visibility can change while this callback waits for the UI thread.
+            if !can_simulate_memory_pressure(
+                IS_INTERACTIVE_SESSION.load(Ordering::Acquire),
+                GAME_MODE_ACTIVE.load(Ordering::Acquire),
+                FULL_STATE.load().settings.unstable_optimizations,
+                current.is_visible().unwrap_or(true),
+                current.is_focused().unwrap_or(false),
+            ) {
+                return;
+            }
+            let lease = {
+                let mut pacer = MEMORY_PRESSURE_PACER.lock();
+                if !pacer.try_claim(Instant::now()) {
+                    return;
+                }
+                MemoryPressureLease(pacer.lease_id)
+            };
+            let controller = platform_webview.controller();
+            let core_webview = match unsafe { controller.CoreWebView2() } {
+                Ok(core_webview) => core_webview,
+                Err(err) => {
+                    log::warn!("Failed to get ICoreWebView2 for memory pressure simulation: {err}");
+                    return;
+                }
+            };
+
+            // Complete through the handler instead of `wait_for_async_operation`: that helper
+            // pumps the Windows message loop until the CDP call finishes, which would run a
+            // nested message loop on the main thread just to wait for a GC whose result we
+            // don't need.
+            let completed = webview2_com::CallDevToolsProtocolMethodCompletedHandler::create(
+                Box::new(move |result, _json| {
+                    drop(lease);
+                    if let Err(err) = result {
+                        log::warn!("Memory.simulatePressureNotification failed: {err:?}");
+                    }
+                    Ok(())
+                }),
+            );
+
+            // Can't use our own `WindowsString` here: webview2-com pins its own `windows`
+            // crate version (0.61) which is semver-incompatible with the one this project
+            // depends on directly (0.62.2), so their `PCWSTR` types don't unify. Must go
+            // through webview2-com's own string helper, built against its own `windows`.
+            let method = webview2_com::CoTaskMemPWSTR::from("Memory.simulatePressureNotification");
+            let params = webview2_com::CoTaskMemPWSTR::from(r#"{"level":"critical"}"#);
+
+            let result = unsafe {
+                core_webview.CallDevToolsProtocolMethod(
+                    *method.as_ref().as_pcwstr(),
+                    *params.as_ref().as_pcwstr(),
+                    &completed,
+                )
+            };
+            if let Err(err) = result {
+                log::warn!(
+                    "Memory.simulatePressureNotification failed: {:?}",
+                    webview2_com::Error::from(err)
+                );
+            }
+        })
+        .log_error();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pressure_only_runs_for_hidden_widgets_in_an_attended_session() {
+        assert!(can_simulate_memory_pressure(
+            true, false, false, false, false
+        ));
+        assert!(
+            !can_simulate_memory_pressure(false, false, false, false, false),
+            "locked session"
+        );
+        assert!(
+            !can_simulate_memory_pressure(true, true, false, false, false),
+            "game mode"
+        );
+        assert!(
+            !can_simulate_memory_pressure(true, false, true, false, false),
+            "shared renderer"
+        );
+        assert!(
+            !can_simulate_memory_pressure(true, false, false, true, false),
+            "visible widget"
+        );
+        assert!(
+            !can_simulate_memory_pressure(true, false, false, false, true),
+            "focused widget"
+        );
+        assert!(
+            !can_simulate_memory_pressure(true, false, false, true, true),
+            "visible and focused widget"
+        );
+    }
+
+    #[test]
+    fn pressure_pacer_spaces_consecutive_runs() {
+        let spacing = Duration::from_secs(5);
+        let mut pacer = MemoryPressurePacer::new(spacing);
+        let start = Instant::now();
+
+        assert!(pacer.try_claim(start), "the first run is always allowed");
+        assert!(
+            !pacer.try_claim(start + spacing * 2),
+            "in-flight work is serialized"
+        );
+        pacer.in_flight = false;
+        assert!(
+            !pacer.try_claim(start),
+            "simultaneous pods must not all pressure their renderer"
+        );
+        assert!(!pacer.try_claim(start + spacing - Duration::from_millis(1)));
+        assert!(pacer.try_claim(start + spacing));
+        pacer.in_flight = false;
+        assert!(pacer.try_claim(start + spacing * 2));
+        pacer.in_flight = false;
+        assert!(!pacer.try_claim(start + spacing * 2 + Duration::from_secs(1)));
+    }
+
+    #[test]
+    fn expired_pressure_completion_does_not_release_a_newer_lease() {
+        let start = Instant::now();
+        let mut pacer = MemoryPressurePacer::new(MEMORY_PRESSURE_MIN_SPACING);
+        assert!(pacer.try_claim(start));
+        let old_lease = pacer.lease_id;
+        assert!(!pacer.try_claim(start + MEMORY_PRESSURE_LEASE_TIMEOUT - Duration::from_millis(1)));
+        assert!(pacer.try_claim(start + MEMORY_PRESSURE_LEASE_TIMEOUT));
+        let current_lease = pacer.lease_id;
+        pacer.release(old_lease);
+        assert!(pacer.in_flight);
+        pacer.release(current_lease);
+        assert!(!pacer.in_flight);
     }
 }

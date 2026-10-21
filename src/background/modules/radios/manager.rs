@@ -95,8 +95,7 @@ impl RadioManager {
 
     pub fn set_radios_state(&self, kind: RadioDeviceKind, enabled: bool) -> Result<()> {
         if Radio::RequestAccessAsync()?.join()? != RadioAccessStatus::Allowed {
-            // todo handle this via UI error.
-            return Ok(());
+            return Err("Windows denied access to change radio state".into());
         }
 
         let mut to_update = Vec::new();
@@ -112,7 +111,9 @@ impl RadioManager {
             RadioState::Off
         };
         for radio in to_update {
-            radio.SetStateAsync(state)?.join()?;
+            if radio.SetStateAsync(state)?.join()? != RadioAccessStatus::Allowed {
+                return Err("Windows denied the radio state change".into());
+            }
         }
         Ok(())
     }

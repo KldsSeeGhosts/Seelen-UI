@@ -163,6 +163,11 @@
   }
 
   const showExtraInfo = $derived(selected && globalState.isDevtoolsEnabled);
+
+  // The row toggles its own details, so an already selected device collapses again.
+  function toggleSelection() {
+    globalState.selectedDeviceId = selected ? null : device.id;
+  }
   const extraInfo = $derived.by(() => {
     const info = [{ label: "Address", value: formatAddress(device.address) }];
     if (device.classRaw != null) {
@@ -181,16 +186,17 @@
 <div
   class="bt-device"
   class:bt-device-selected={selected}
-  onclick={() => {
-    if (!selected) {
-      globalState.selectedDeviceId = device.id;
-    }
+  aria-expanded={selected}
+  onclick={(event) => {
+    if ((event.target as HTMLElement).closest("button, input, label, select, textarea, a")) return;
+    toggleSelection();
   }}
   role="button"
   tabindex="0"
   onkeydown={(e) => {
-    if (e.key === "Enter" || e.key === " ") {
-      globalState.selectedDeviceId = device.id;
+    if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      toggleSelection();
     }
   }}
 >
@@ -217,7 +223,10 @@
     {/if}
 
     {#if showPairingFields()}
-      <div class="bt-device-pairing">
+      <!-- controls inside the row must not collapse it -->
+      <div
+        class="bt-device-pairing"
+      >
         <div class="bt-device-pairing-message">
           {getPairingMessage()}
         </div>
@@ -258,7 +267,9 @@
     {/if}
 
     {#if !loading}
-      <div class="bt-device-actions">
+      <div
+        class="bt-device-actions"
+      >
         {#if device.paired}
           {#if device.canConnect}
             <button data-skin="solid" onclick={handleConnect} disabled={loading}>

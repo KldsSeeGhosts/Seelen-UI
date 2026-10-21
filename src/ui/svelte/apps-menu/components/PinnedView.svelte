@@ -39,6 +39,7 @@
   });
 
   function handleWindowKeyDown(event: KeyboardEvent) {
+    if (event.defaultPrevented || event.isComposing) return;
     switch (event.key) {
       case "Enter":
         event.preventDefault();
@@ -72,6 +73,7 @@
   const activateDropzone = debounce((targetId: UniqueIdentifier) => {
     activeDropzoneId = targetId;
   }, FOLDER_CREATION_DELAY_MS);
+  onDestroy(() => activateDropzone.cancel());
 
   function cancelDropzone() {
     activateDropzone.cancel();

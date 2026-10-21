@@ -10,6 +10,7 @@ import { settingsState } from "./settings.svelte.ts";
 import { debounce } from "lodash";
 import type { AppOrFileWegItem } from "../types.ts";
 import { focused, interactables, selfWinId, widgetStatuses, windowsColors } from "./getters.svelte.ts";
+import { overlayState } from "./overlays.svelte.ts";
 
 export { focused, interactables, widgetStatuses, windowsColors };
 
@@ -52,6 +53,12 @@ const _currentMonitorMaximizedColors = $derived.by((): UserAppWindowColors | nul
 });
 
 const _isDockOverlapped = $derived.by(() => {
+  // Temporary capture/recording/transcription overlays are not part of the normal
+  // application list and usually never take focus, but they still win over the dock.
+  if (overlayState.overlapsDock) {
+    return true;
+  }
+
   // If foreground is not in interactable windows, return false directly, this handled start menu or desktop focus cases.
   const foreground = focused.value;
   if (!interactables.value.some((w) => w.hwnd === foreground.hwnd)) {

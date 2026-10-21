@@ -1,5 +1,9 @@
 clear: Clear all
 dnd: Do Not Disturb
+dnd_failed: Could not change Do Not Disturb
 empty: No notifications
+load_failed: Could not load
+loading: Loading...
+retry: Retry
 settings: More Notifications Settings
 title: Notifications

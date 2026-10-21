@@ -38,6 +38,13 @@ export function cancelHoverPreview() {
   if (openedByHover) {
     openedByHover = false;
     lastHoverEnd = Date.now();
+    // Replace a queued cold open without closing a preview the pointer is entering.
+    invoke(SeelenCommand.TriggerWidget, {
+      payload: {
+        id: "@seelen/weg-preview" as WidgetId,
+        customArgs: { cancelPending: true },
+      },
+    }).catch((error) => console.error("Failed to cancel pending dock preview:", error));
   }
 }
 
@@ -101,7 +108,8 @@ export function triggerPreviewWidget(itemEl: HTMLElement, windows: UserAppWindow
         hwnds: windows.map((w) => w.hwnd),
         position: dockSide,
         anchor,
+        dockRect: viewRect,
       },
     },
-  });
+  }).catch((error) => console.error("Failed to open dock preview:", error));
 }

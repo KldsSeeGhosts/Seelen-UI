@@ -48,11 +48,13 @@
       style:transform={`scale(${box.scale})`}
       style:transform-origin="left top"
     >
-      <div class="task-switcher">
-        {#each globalState.windows as window, index (window.hwnd)}
-          <TaskItem task={window} {index} />
-        {/each}
-      </div>
+      {#if globalState.showing}
+        <div class="task-switcher">
+          {#each globalState.windows as window, index (window.hwnd)}
+            <TaskItem task={window} {index} />
+          {/each}
+        </div>
+      {/if}
     </div>
   {/if}
 </div>

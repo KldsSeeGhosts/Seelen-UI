@@ -11,6 +11,7 @@ import {
   patchWidgetInstanceConfig as patchInstance,
   patchWidgetMonitorConfig as patchMonitor,
   resetWidgetConfig,
+  resetWidgetMonitorConfig,
 } from "./application.ts";
 import { widgets } from "../../../state/resources.ts";
 import { getDevTools } from "../../developer/application.ts";
@@ -119,7 +120,9 @@ export function WidgetConfiguration({
           </SettingsOption>
           <SettingsOption>
             <b>{t("reset_configurations")}</b>
-            <Button onClick={() => resetWidgetConfig(widgetId)}>
+            <Button
+              onClick={() => monitorId ? resetWidgetMonitorConfig(monitorId, widgetId) : resetWidgetConfig(widgetId)}
+            >
               <Icon iconName="RiResetLeftLine" />
             </Button>
           </SettingsOption>
@@ -153,7 +156,7 @@ export function WidgetConfiguration({
         isByMonitor={!!monitorId}
       />
 
-      {children}
+      {children ?? (widgetId === "@seelen/weg" ? <SeelenWegSettings monitorId={monitorId} /> : null)}
 
       {areDevToolsEnabled && (
         <SettingsGroup>

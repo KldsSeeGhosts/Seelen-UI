@@ -44,14 +44,24 @@ impl crate::tauri_handlers::Handlers {
         NetworkManager::get_adapters()
     }
 
-    pub fn get_network_hotspot() -> Result<Option<Hotspot>> {
-        get_network_manager();
-        NetworkManager::get_hotspot()
+    pub async fn get_network_hotspot() -> Result<Option<Hotspot>> {
+        crate::get_tokio_handle()
+            .spawn_blocking(|| {
+                get_network_manager();
+                NetworkManager::get_hotspot()
+            })
+            .await
+            .map_err(|err| format!("Failed to read hotspot state: {err}"))?
     }
 
-    pub fn set_network_hotspot_state(enabled: bool) -> Result<()> {
-        get_network_manager();
-        NetworkManager::toggle_hotspot(enabled)
+    pub async fn set_network_hotspot_state(enabled: bool) -> Result<()> {
+        crate::get_tokio_handle()
+            .spawn_blocking(move || {
+                get_network_manager();
+                NetworkManager::toggle_hotspot(enabled)
+            })
+            .await
+            .map_err(|err| format!("Failed to change hotspot state: {err}"))?
     }
 
     pub fn get_network_internet_connection() -> Result<bool> {

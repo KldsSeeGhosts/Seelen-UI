@@ -29,15 +29,17 @@ export function navigateInDirection(
     .filter((item) => {
       if (item === currentElement) return false;
       const rect = item.getBoundingClientRect();
+      const sameRow = Math.abs(rect.top - currentRect.top) <= 2;
+      const sameColumn = Math.abs(rect.left - currentRect.left) <= 2;
       switch (direction) {
         case "right":
-          return rect.top === currentRect.top && rect.left > currentRect.left;
+          return sameRow && rect.left > currentRect.left;
         case "left":
-          return rect.top === currentRect.top && rect.left < currentRect.left;
+          return sameRow && rect.left < currentRect.left;
         case "down":
-          return rect.left === currentRect.left && rect.top > currentRect.top;
+          return sameColumn && rect.top > currentRect.top;
         case "up":
-          return rect.left === currentRect.left && rect.top < currentRect.top;
+          return sameColumn && rect.top < currentRect.top;
       }
     });
 
@@ -54,12 +56,12 @@ export function selectPreselectedOrFirst(scope: SelectionScope): HTMLElement | n
   const root = scope.container();
 
   if (selected) {
-    const element = root.querySelector<HTMLElement>(`[data-item-id="${selected}"]`);
+    const element = Array.from(root.querySelectorAll<HTMLElement>("[data-item-id]"))
+      .find((item) => item.dataset.itemId === selected);
     if (element) return element;
   }
 
-  // return root.querySelector<HTMLElement>(".app, .folder");
-  return null;
+  return root.querySelector<HTMLElement>(".app, .folder");
 }
 
 export interface InputKeyDownOptions {

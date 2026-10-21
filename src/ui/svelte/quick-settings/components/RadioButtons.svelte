@@ -11,6 +11,12 @@
 
   const darkModeStatus = $derived(state.darkModeStatus);
   const nightLightStatus = $derived(state.nightLightStatus);
+  const darkModePending = $derived(state.isActionPending("dark-mode"));
+  const nightLightPending = $derived(state.isActionPending("night-light"));
+
+  function radioActionKey(radio: RadioDevice): string {
+    return `radio:${radio.id}`;
+  }
 
   function getRadioIcon(kind: RadioDeviceKind): IconName {
     switch (kind) {
@@ -53,42 +59,58 @@
     }
   }
 
-  async function toggleRadio(radio: RadioDevice) {
-    await invoke(SeelenCommand.SetRadioState, {
-      kind: radio.kind,
-      enabled: !radio.isEnabled,
-    });
-  }
-
-  async function toggleHotspot() {
-    if (!state.hotspot) return;
-    await invoke(SeelenCommand.SetNetworkHotspotState, {
-      enabled: state.hotspot.state !== HotspotState.on,
-    });
-  }
-
-  async function toggleHdr() {
-    const newState = !hdrEnabled;
-    await Promise.all(
-      hdrMonitors.map((monitor) =>
-        invoke(SeelenCommand.SetMonitorHdr, { id: monitor.id, state: newState }),
-      ),
+  function toggleRadio(radio: RadioDevice) {
+    const enabled = !radio.isEnabled;
+    void state.runAction(
+      radioActionKey(radio),
+      () => invoke(SeelenCommand.SetRadioState, { kind: radio.kind, enabled }),
+      () => state.refreshRadios(),
     );
   }
 
-  async function toggleDarkMode() {
-    await invoke(SeelenCommand.SystemSetDarkMode, { enabled: !state.darkMode });
+  function toggleHotspot() {
+    const hotspot = state.hotspot;
+    if (!hotspot) return;
+    const enabled = hotspot.state !== HotspotState.on;
+    void state.runAction(
+      "hotspot",
+      () => invoke(SeelenCommand.SetNetworkHotspotState, { enabled }),
+      () => state.refreshHotspot(),
+    );
   }
 
-  async function toggleNightLight() {
+  function toggleHdr() {
+    const enabled = !hdrEnabled;
+    const monitorIds = hdrMonitors.map((monitor) => monitor.id);
+    void state.runAction(
+      "hdr",
+      () =>
+        Promise.all(monitorIds.map((id) => invoke(SeelenCommand.SetMonitorHdr, { id, state: enabled }))),
+      () => state.refreshMonitors(),
+    );
+  }
+
+  function toggleDarkMode() {
+    if (darkModeStatus !== "ready") return;
+    const enabled = !state.darkMode;
+    void state.runAction(
+      "dark-mode",
+      () => invoke(SeelenCommand.SystemSetDarkMode, { enabled }),
+      () => state.refreshDarkMode(),
+    );
+  }
+
+  function toggleNightLight() {
     if (nightLightStatus !== "ready") return;
     const enabled = !state.nightLightEnabled;
-    try {
-      await invoke(SeelenCommand.SystemSetNightLightEnabled, { enabled });
-      state.nightLightEnabled = enabled;
-    } catch (error) {
-      console.error("quick-settings: failed to change the night light", error);
-    }
+    void state.runAction(
+      "night-light",
+      async () => {
+        await invoke(SeelenCommand.SystemSetNightLightEnabled, { enabled });
+        state.nightLightEnabled = enabled;
+      },
+      () => state.refreshNightLight(),
+    );
   }
 </script>
 
@@ -97,6 +119,8 @@
     <button
       class="radio-button"
       data-active={radio.isEnabled}
+      disabled={state.isActionPending(radioActionKey(radio))}
+      aria-busy={state.isActionPending(radioActionKey(radio))}
       onclick={() => toggleRadio(radio)}
       title={`${radio.name} - ${radio.isEnabled ? $t("enabled") : $t("disabled")}`}
     >
@@ -114,7 +138,9 @@
     <button
       class="radio-button"
       data-active={state.hotspot.state === HotspotState.on}
-      disabled={state.hotspot.state === HotspotState.inTransition}
+      disabled={state.hotspot.state === HotspotState.inTransition ||
+        state.isActionPending("hotspot")}
+      aria-busy={state.isActionPending("hotspot")}
       onclick={toggleHotspot}
       title={`${$t("hotspot")} - ${state.hotspot.state === HotspotState.on ? $t("enabled") : $t("disabled")}`}
     >
@@ -134,6 +160,8 @@
     <button
       class="radio-button"
       data-active={hdrEnabled}
+      disabled={state.isActionPending("hdr")}
+      aria-busy={state.isActionPending("hdr")}
       onclick={toggleHdr}
       title={`${$t("hdr")} -${hdrEnabled ? $t("enabled") : $t("disabled")}`}
     >
@@ -150,7 +178,8 @@
   <button
     class="radio-button"
     data-active={darkModeStatus === "ready" && state.darkMode}
-    disabled={darkModeStatus !== "ready"}
+    disabled={darkModeStatus !== "ready" || darkModePending}
+    aria-busy={darkModePending}
     onclick={toggleDarkMode}
     title={`${$t("dark_mode")} - ${statusLabel(darkModeStatus, state.darkMode)}`}
   >
@@ -166,7 +195,8 @@
   <button
     class="radio-button"
     data-active={nightLightStatus === "ready" && state.nightLightEnabled}
-    disabled={nightLightStatus !== "ready"}
+    disabled={nightLightStatus !== "ready" || nightLightPending}
+    aria-busy={nightLightPending}
     onclick={toggleNightLight}
     title={`${$t("night_light")} - ${statusLabel(nightLightStatus, state.nightLightEnabled)}`}
   >
@@ -197,4 +227,17 @@
       </span>
     </button>
   {/if}
+
+  {#if state.hasActionFailed()}
+    <p class="radio-buttons-error quick-settings-label" role="status">
+      {$t("change_failed")}
+    </p>
+  {/if}
 </div>
+
+<style>
+  /* spans both grid columns under the controls instead of taking a single cell */
+  .radio-buttons-error {
+    grid-column: 1 / -1;
+  }
+</style>

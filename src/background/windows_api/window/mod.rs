@@ -17,7 +17,9 @@ use windows::{
         Foundation::{HWND, RECT},
         UI::{
             Shell::FOLDERID_System,
-            WindowsAndMessaging::{SET_WINDOW_POS_FLAGS, SHOW_WINDOW_CMD, SW_RESTORE},
+            WindowsAndMessaging::{
+                GA_ROOT, GetAncestor, SET_WINDOW_POS_FLAGS, SHOW_WINDOW_CMD, SW_RESTORE,
+            },
         },
     },
 };
@@ -264,6 +266,11 @@ impl Window {
 
     pub fn is_minimized(&self) -> bool {
         WindowsApi::is_iconic(self.0)
+    }
+
+    /// Whether the window is a top-level window (not a child of another window).
+    pub fn is_top_level(&self) -> bool {
+        unsafe { GetAncestor(self.0, GA_ROOT) == self.0 }
     }
 
     pub fn is_maximized(&self) -> bool {

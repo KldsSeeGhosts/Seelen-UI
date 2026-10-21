@@ -11,45 +11,23 @@ export async function extractVideoThumbnail(
   try {
     // Wait for video to load metadata if not already loaded
     if (videoElement.readyState < HTMLMediaElement.HAVE_METADATA) {
-      await new Promise<void>((resolve, reject) => {
-        const handleLoaded = () => {
-          videoElement.removeEventListener("loadedmetadata", handleLoaded);
-          videoElement.removeEventListener("error", handleError);
-          resolve();
-        };
-        const handleError = () => {
-          videoElement.removeEventListener("loadedmetadata", handleLoaded);
-          videoElement.removeEventListener("error", handleError);
-          reject(new Error("Failed to load video metadata"));
-        };
-        videoElement.addEventListener("loadedmetadata", handleLoaded);
-        videoElement.addEventListener("error", handleError);
-      });
+      await waitForVideo(videoElement, "loadedmetadata");
     }
 
-    // Seek to first frame (1 second to ensure we get a good frame)
-    videoElement.currentTime = 1;
+    const seekTime = Number.isFinite(videoElement.duration) ? Math.min(1, videoElement.duration / 2) : 1;
+    if (Math.abs(videoElement.currentTime - seekTime) > 0.001) {
+      await waitForVideo(videoElement, "seeked", () => {
+        videoElement.currentTime = seekTime;
+      });
+    } else if (videoElement.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      await waitForVideo(videoElement, "loadeddata");
+    }
 
-    // Wait for seek to complete
-    await new Promise<void>((resolve, reject) => {
-      const handleSeeked = () => {
-        videoElement.removeEventListener("seeked", handleSeeked);
-        videoElement.removeEventListener("error", handleError);
-        resolve();
-      };
-      const handleError = () => {
-        videoElement.removeEventListener("seeked", handleSeeked);
-        videoElement.removeEventListener("error", handleError);
-        reject(new Error("Failed to seek video"));
-      };
-      videoElement.addEventListener("seeked", handleSeeked);
-      videoElement.addEventListener("error", handleError);
-    });
-
-    // Create canvas with video dimensions
+    // Bound thumbnail memory and IPC payloads even for 4K/8K wallpapers.
     const canvas = document.createElement("canvas");
-    canvas.width = videoElement.videoWidth;
-    canvas.height = videoElement.videoHeight;
+    const scale = Math.min(1, 512 / Math.max(videoElement.videoWidth, videoElement.videoHeight));
+    canvas.width = Math.max(1, Math.round(videoElement.videoWidth * scale));
+    canvas.height = Math.max(1, Math.round(videoElement.videoHeight * scale));
 
     // Draw video frame to canvas
     const ctx = canvas.getContext("2d");
@@ -105,4 +83,34 @@ export async function extractThumbnailFromSource(
     video.load();
     document.body.removeChild(video);
   }
+}
+/** Corrupt or unsupported media must not leave the generation dialog waiting forever. */
+function waitForVideo(
+  video: HTMLVideoElement,
+  event: "loadedmetadata" | "loadeddata" | "seeked",
+  start?: () => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      clearTimeout(timeout);
+      video.removeEventListener(event, loaded);
+      video.removeEventListener("error", failed);
+    };
+    const loaded = () => {
+      cleanup();
+      resolve();
+    };
+    const failed = () => {
+      cleanup();
+      reject(new Error(`Failed to load video frame (${event})`));
+    };
+    const timeout = setTimeout(failed, 15_000);
+    video.addEventListener(event, loaded);
+    video.addEventListener("error", failed);
+    try {
+      start?.();
+    } catch {
+      failed();
+    }
+  });
 }

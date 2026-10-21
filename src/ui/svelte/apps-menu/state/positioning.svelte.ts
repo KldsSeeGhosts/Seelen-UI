@@ -2,8 +2,15 @@ import { Widget } from "@seelen-ui/lib";
 import type { PhysicalMonitor } from "@seelen-ui/lib/types";
 import { globalState } from "./mod.svelte";
 import { StartDisplayMode } from "../constants";
+import { tick } from "svelte";
 
 let desiredPosition = $state<{ x: number; y: number } | null>(null);
+let placement: Promise<void> = Promise.resolve();
+let triggerVersion = 0;
+
+export function cancelPendingOpen() {
+  triggerVersion++;
+}
 
 // Monitor under the cursor position that triggered the menu, falling back to primary
 let monitorToShow = $derived.by(() => {
@@ -62,17 +69,27 @@ $effect.root(() => {
   $effect(() => {
     globalState.displayMode;
     if (monitorToShow) {
-      placeCenteredToMonitor(monitorToShow);
+      placement = placeCenteredToMonitor(monitorToShow);
+      placement.catch((error) => console.error("Failed to position app menu:", error));
     }
   });
 });
 
-export async function onTriggered(cursorPosition?: { x: number; y: number } | null) {
+export async function onTriggered(
+  cursorPosition?: { x: number; y: number } | null,
+  beforeShow?: () => void,
+) {
+  const version = ++triggerVersion;
   desiredPosition = cursorPosition ?? null;
 
   globalState.view = globalState.defaultView;
   globalState.version++; // trigger reactive updates
 
+  // Let the placement effect consume the new monitor before exposing the window.
+  await tick();
+  await placement;
+  if (version !== triggerVersion) return;
+  beforeShow?.();
   await Widget.self.show();
-  await Widget.self.focus();
+  if (version === triggerVersion) await Widget.self.focus();
 }

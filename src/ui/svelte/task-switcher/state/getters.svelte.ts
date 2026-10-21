@@ -17,7 +17,7 @@ subscribe(SeelenEvent.UserAppWindowsChanged, ({ payload }) => {
 });
 
 export const previews = lazyRune(() => invoke(SeelenCommand.GetUserAppWindowsPreviews));
-subscribe(SeelenEvent.UserAppWindowsPreviewsChanged, previews.setByPayload);
+const previewSubscription = subscribe(SeelenEvent.UserAppWindowsPreviewsChanged, previews.setByPayload);
 
 export const focusedWinId = lazyRune(async () => (await invoke(SeelenCommand.GetFocusedApp)).hwnd);
 subscribe(SeelenEvent.GlobalFocusChanged, (e) => {
@@ -27,7 +27,11 @@ subscribe(SeelenEvent.GlobalFocusChanged, (e) => {
 await Promise.all([
   settings.init(),
   windows.init(),
-  previews.init(),
   focusedWinId.init(),
   monitors.init(),
 ]);
+
+// Optional thumbnails must not delay the switcher's first usable frame.
+previewSubscription.then(() => previews.init()).catch((error) => {
+  console.error("Failed to load task-switcher previews:", error);
+});
