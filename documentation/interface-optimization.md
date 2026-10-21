@@ -395,17 +395,17 @@ The positioning service's full-screen thumbnail canvases are now excluded from f
 placement also stays in the source window's normal/topmost group, avoiding accidental promotion of ordinary window
 animations into the group used by dictation and capture tools.
 
-The saved dock setting on the inspected desktop was `OnOverlap`, which intentionally reserves no work area. Choose
-**Dock > Auto Hide > Never** to enable persistent dock space. Temporary intersecting capture/dictation overlays still
-hide the dock without releasing that reservation, and it returns after the overlay disappears. This means capture
-controls can take priority without tiling ordinary windows over the persistent dock area.
+The dock is configured as **Dock > Auto Hide > Never**, which enables persistent dock space. Temporary intersecting
+capture/dictation overlays still hide the dock without releasing that reservation, and it returns after the overlay
+disappears. This means capture controls can take priority without tiling ordinary windows over the persistent dock area.
 
 The separate Jot Windows source was also updated to reconcile its presenter preference with the actual native topmost
-style on startup/reveal and during its existing visibility check. A read-only inspection found the parked HUD lacked
-that flag; active dictation reproduction and verification remain pending. The repair preserves the paste target's focus.
+style on startup/reveal and during its existing visibility check. After deploying the Jot UI update, native inspection
+confirmed both topmost and no-activate flags. Active dictation and capture coexistence verification remains pending. The
+repair preserves the paste target's focus.
 
 Validation: Rust checking and Clippy passed; 11 window-manager tests, two positioning tests and six overlay tests
 passed. A native probe using hidden disposable windows reproduced promotion into the topmost group when inserting after
 a topmost predecessor. Jot's Windows debug build passed with zero warnings/errors, using an isolated output directory.
-No installation or desktop restart was performed. The GUI tool rejected live dock configuration with
-`capability manifest idle timeout exceeded`, so the saved setting remains unchanged.
+The Seelen package was installed locally from `17918ca2` on October 21, 2026; its installed manifest records that exact
+source commit. The user confirmed that transient terminals no longer disturb the tiling layout.
