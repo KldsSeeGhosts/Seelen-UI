@@ -65,6 +65,9 @@ static IGNORED_OVERLAY_CLASSES: &[&str] = &[
     "TopLevelWindowForOverflowXamlIsland",
     "Windows.Internal.Shell.TabProxyWindow",
     "TaskListThumbnailWnd",
+    // Animation canvases belong to slu-service.exe, not the UI process. Their
+    // virtual-screen bounds are not a foreign capture or dictation overlay.
+    "SeelenPositioningThumbnailOverlay",
 ];
 
 /// Shell surfaces that are commonly tool/no-activate windows. They must never take the
@@ -425,6 +428,9 @@ mod tests {
         assert!(is_ignored_overlay_class("tooltips_class32"));
         assert!(is_ignored_overlay_class("#32768"));
         assert!(is_ignored_overlay_class("Shell_TrayWnd"));
+        assert!(is_ignored_overlay_class(
+            "SeelenPositioningThumbnailOverlay"
+        ));
         assert!(!is_ignored_overlay_class("ShareX_RegionCaptureForm"));
         assert!(!is_ignored_overlay_class("JotOverlayWindow"));
     }

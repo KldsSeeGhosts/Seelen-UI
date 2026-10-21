@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     sync::{Arc, LazyLock},
+    time::Instant,
 };
 
 use seelen_core::{
@@ -25,6 +26,7 @@ use crate::{
     virtual_desktops::VdManager,
     widgets::window_manager::{
         WindowManagerV2,
+        admission::{TerminalAdmission, is_terminal_class},
         cli::{Axis, Direction, StepWay},
         handler::{set_app_window_position, set_app_windows_positions},
     },
@@ -53,6 +55,7 @@ pub struct TwmState {
     pub monocle: HashMap<WorkspaceId, bool>,
     pub pending_reservation: Option<PendingReservation>,
     layout_cache: HashMap<WorkspaceId, PluginId>,
+    terminal_admission: TerminalAdmission,
 }
 
 #[derive(Debug, Clone)]
@@ -115,7 +118,10 @@ impl TwmState {
                 UserAppWinEvent::Added(hwnd) | UserAppWinEvent::Updated(hwnd) => {
                     state.recover_window(&Window::from(hwnd))
                 }
-                UserAppWinEvent::Removed(_) => false,
+                UserAppWinEvent::Removed(hwnd) => {
+                    state.terminal_admission.remove(hwnd);
+                    false
+                }
             };
             if state.recompute_paused_by_monitor() || recovered {
                 TwmState::send(TwmStateEvent::Changed);
@@ -231,6 +237,34 @@ impl TwmState {
             // event will handle admission once the workspace association exists.
             return false;
         };
+        if is_terminal_class(&window.class()) {
+            let now = Instant::now();
+            let hwnd = window.address();
+            let (pending, first) =
+                self.terminal_admission
+                    .observe(hwnd, window.process().id(), now);
+            if now < pending.deadline {
+                // Only the first observation schedules a callback. Subsequent focus,
+                // geometry and lifecycle events share the original deadline.
+                if first {
+                    crate::get_tokio_handle().spawn(async move {
+                        tokio::time::sleep_until(pending.deadline.into()).await;
+                        let mut state = WM_STATE.lock();
+                        let window = Window::from(hwnd);
+                        if state.terminal_admission.contains(hwnd, pending) {
+                            if window.process().id() == pending.process_id
+                                && state.recover_window(&window)
+                            {
+                                TwmState::send(TwmStateEvent::Changed);
+                            }
+                            state.terminal_admission.remove(hwnd);
+                        }
+                    });
+                }
+                return false;
+            }
+            self.terminal_admission.remove(hwnd);
+        }
         self.add_to_layout(window, &workspace_id);
         log::debug!("Recovered {window} into window manager workspace {workspace_id}");
         true
@@ -335,6 +369,7 @@ impl TwmState {
     }
 
     pub fn remove(&mut self, window: &Window) {
+        self.terminal_admission.remove(window.address());
         let window_id = window.address();
         for tree in self.state.workspaces.values_mut() {
             if tree.contains(&window_id) {

@@ -1,3 +1,4 @@
+mod admission;
 pub mod cli;
 pub mod handler;
 pub mod hook;

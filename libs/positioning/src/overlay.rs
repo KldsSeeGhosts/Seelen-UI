@@ -12,12 +12,13 @@ use windows::{
         UI::HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetThreadDpiAwarenessContext},
         UI::WindowsAndMessaging::{
             CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GW_HWNDPREV,
-            GetSystemMetrics, GetWindow, HWND_TOP, LWA_ALPHA, MSG, PM_REMOVE, PeekMessageW,
-            RegisterClassW, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
-            SM_YVIRTUALSCREEN, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
-            SetLayeredWindowAttributes, SetWindowPos, TranslateMessage, WM_DPICHANGED,
-            WM_GETDPISCALEDSIZE, WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
-            WS_EX_NOREDIRECTIONBITMAP, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, WS_POPUP,
+            GWL_EXSTYLE, GetSystemMetrics, GetWindow, GetWindowLongPtrW, HWND_TOP, HWND_TOPMOST,
+            LWA_ALPHA, MSG, PM_REMOVE, PeekMessageW, RegisterClassW, SM_CXVIRTUALSCREEN,
+            SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SWP_NOACTIVATE, SWP_NOMOVE,
+            SWP_NOSIZE, SWP_SHOWWINDOW, SetLayeredWindowAttributes, SetWindowPos, TranslateMessage,
+            WM_DPICHANGED, WM_GETDPISCALEDSIZE, WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
+            WS_EX_NOREDIRECTIONBITMAP, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
+            WS_POPUP,
         },
     },
     core::{PCWSTR, w},
@@ -98,7 +99,14 @@ impl ThumbnailOverlay {
         overlay.set_destination(initial)?;
 
         // Right above the source in z-order, so windows that covered it keep covering the thumbnail.
-        let insert_after = unsafe { GetWindow(HWND(source as _), GW_HWNDPREV) }.unwrap_or(HWND_TOP);
+        let previous = unsafe { GetWindow(HWND(source as _), GW_HWNDPREV) }.ok();
+        let source_topmost = unsafe { GetWindowLongPtrW(HWND(source as _), GWL_EXSTYLE) }
+            & WS_EX_TOPMOST.0 as isize
+            != 0;
+        let previous_topmost = previous.is_some_and(|hwnd| {
+            (unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) }) & WS_EX_TOPMOST.0 as isize != 0
+        });
+        let insert_after = overlay_insert_after(previous, source_topmost, previous_topmost);
         unsafe {
             SetWindowPos(
                 hwnd,
@@ -163,6 +171,23 @@ impl Drop for ThumbnailOverlay {
     }
 }
 
+/// Keep the thumbnail in its source's z-order band. Inserting an ordinary
+/// window after the last topmost window can promote it into that band, above a
+/// dictation pill that appears later. HWND_TOP keeps it below all topmost tools.
+fn overlay_insert_after(
+    previous: Option<HWND>,
+    source_topmost: bool,
+    previous_topmost: bool,
+) -> HWND {
+    if source_topmost {
+        previous
+            .filter(|_| previous_topmost)
+            .unwrap_or(HWND_TOPMOST)
+    } else {
+        previous.filter(|_| !previous_topmost).unwrap_or(HWND_TOP)
+    }
+}
+
 /// `outer` must be the current `GetWindowRect` of `hwnd`.
 fn get_frame_insets(hwnd: isize, outer: &Rect) -> Result<RECT> {
     let mut frame = RECT::default();
@@ -222,5 +247,29 @@ unsafe extern "system" fn overlay_wnd_proc(
         }
         WM_DPICHANGED => LRESULT(0),
         _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normal_animation_never_joins_the_topmost_band() {
+        let previous = HWND(42 as _);
+        assert_eq!(overlay_insert_after(Some(previous), false, true), HWND_TOP);
+        assert_eq!(overlay_insert_after(None, false, false), HWND_TOP);
+        assert_eq!(overlay_insert_after(Some(previous), false, false), previous);
+    }
+
+    #[test]
+    fn topmost_animation_keeps_its_source_band() {
+        let previous = HWND(42 as _);
+        assert_eq!(overlay_insert_after(Some(previous), true, true), previous);
+        assert_eq!(overlay_insert_after(None, true, false), HWND_TOPMOST);
+        assert_eq!(
+            overlay_insert_after(Some(previous), true, false),
+            HWND_TOPMOST
+        );
     }
 }

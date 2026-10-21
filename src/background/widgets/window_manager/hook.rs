@@ -200,10 +200,9 @@ impl WindowManagerV2 {
                 state.cancel_reservation();
                 TwmState::send(TwmStateEvent::Changed);
             }
-            VirtualDesktopEvent::WindowAdded { window, desktop } => {
+            VirtualDesktopEvent::WindowAdded { window, .. } => {
                 let window = &Window::from(window);
-                if !state.is_managed(window) && Self::should_be_managed(window.hwnd()) {
-                    state.add_to_layout(window, &desktop);
+                if state.recover_window(window) {
                     TwmState::send(TwmStateEvent::Changed);
                 }
             }
@@ -224,8 +223,9 @@ impl WindowManagerV2 {
             }
             VirtualDesktopEvent::WindowRemoved { window } => {
                 let window = &Window::from(window);
-                if state.is_managed(window) {
-                    state.remove(window);
+                let was_managed = state.is_managed(window);
+                state.remove(window);
+                if was_managed {
                     TwmState::send(TwmStateEvent::Changed);
                 }
             }
@@ -233,9 +233,7 @@ impl WindowManagerV2 {
                 let window = &Window::from(window);
                 if state.is_managed(window) {
                     state.set_stack_active_window(window)?;
-                } else if Self::should_be_managed(window.hwnd()) {
-                    let desktop = window.workspace_id()?;
-                    state.add_to_layout(window, &desktop);
+                } else if state.recover_window(window) {
                     TwmState::send(TwmStateEvent::Changed);
                 }
             }

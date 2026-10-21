@@ -381,3 +381,31 @@ maximized windows with a persistent dock on each edge, auto-hide restoration, di
 Exercise ShareX region capture, recording controls and Jot's recording overlay, including when the pointer reaches the
 dock edge. The capture canvas must retain full monitor/virtual-desktop coordinates and controls must remain clickable.
 Cancelling or finishing the overlay must restore the dock without changing the user's hide-mode setting.
+
+## Follow-up: transient terminals and dictation stacking
+
+On October 21, runtime logs confirmed windows repeatedly entering and leaving tiling within the same second. New console
+and Windows Terminal windows now wait 750 ms before automatic tiling. Focus, title, geometry and desktop events share
+one deadline; closing/hiding a window cancels admission, and stale callbacks cannot admit a reused handle. Persistent
+terminals still tile after that interval. Ordinary applications and explicit placement commands keep their existing
+behavior. This prevents layout churn from brief command windows; suppressing their initial native flash requires the
+launching application to create background processes without a console.
+
+The positioning service's full-screen thumbnail canvases are now excluded from foreign-overlay detection. Their z-order
+placement also stays in the source window's normal/topmost group, avoiding accidental promotion of ordinary window
+animations into the group used by dictation and capture tools.
+
+The saved dock setting on the inspected desktop was `OnOverlap`, which intentionally reserves no work area. Choose
+**Dock > Auto Hide > Never** to enable persistent dock space. Temporary intersecting capture/dictation overlays still
+hide the dock without releasing that reservation, and it returns after the overlay disappears. This means capture
+controls can take priority without tiling ordinary windows over the persistent dock area.
+
+The separate Jot Windows source was also updated to reconcile its presenter preference with the actual native topmost
+style on startup/reveal and during its existing visibility check. A read-only inspection found the parked HUD lacked
+that flag; active dictation reproduction and verification remain pending. The repair preserves the paste target's focus.
+
+Validation: Rust checking and Clippy passed; 11 window-manager tests, two positioning tests and six overlay tests
+passed. A native probe using hidden disposable windows reproduced promotion into the topmost group when inserting after
+a topmost predecessor. Jot's Windows debug build passed with zero warnings/errors, using an isolated output directory.
+No installation or desktop restart was performed. The GUI tool rejected live dock configuration with
+`capability manifest idle timeout exceeded`, so the saved setting remains unchanged.
